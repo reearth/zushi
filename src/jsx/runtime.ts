@@ -60,8 +60,24 @@ export function useState<S>(
   return g.useState(initial);
 }
 
+export function useReducer<S, A>(
+  reducer: (state: S, action: A) => S,
+  initialArg: S,
+  init?: (arg: S) => S
+): [S, (action: A) => void] {
+  return g.useReducer(reducer, initialArg, init);
+}
+
 export function useEffect(effect: () => void | (() => void), deps?: unknown[]): void {
   g.useEffect(effect, deps);
+}
+
+/** Alias for {@link useEffect}; there is no separate layout phase in the VM. */
+export function useLayoutEffect(
+  effect: () => void | (() => void),
+  deps?: unknown[]
+): void {
+  g.useLayoutEffect(effect, deps);
 }
 
 export function useMemo<T>(factory: () => T, deps?: unknown[]): T {
@@ -74,4 +90,21 @@ export function useCallback<T extends (...args: any[]) => any>(cb: T, deps?: unk
 
 export function useRef<T>(initial: T): { current: T } {
   return g.useRef(initial);
+}
+
+/** Returns a stable id for the calling component, e.g. for form/aria wiring. */
+export function useId(): string {
+  return g.useId();
+}
+
+export type Context<T> = {
+  Provider: (props: { value: T; children?: unknown }) => unknown;
+};
+
+export function createContext<T>(defaultValue: T): Context<T> {
+  return g.createContext(defaultValue);
+}
+
+export function useContext<T>(context: Context<T>): T {
+  return g.useContext(context);
 }

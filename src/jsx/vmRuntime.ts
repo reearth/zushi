@@ -96,6 +96,7 @@ function zushiVmRuntime() {
 
   let currentHooks: any[] | null = null;
   let currentHookIndex = 0;
+  let currentPath = "";
 
   function getHook(init: any) {
     const hooks = currentHooks as any[];
@@ -117,6 +118,32 @@ function zushiVmRuntime() {
       }
     }
     return [hook.v, set];
+  }
+
+  function useReducer(reducer: any, initialArg: any, init: any) {
+    const ownerRoot = active;
+    const hook = getHook(function () {
+      return { v: typeof init === "function" ? init(initialArg) : initialArg };
+    });
+    function dispatch(action: any) {
+      const nv = reducer(hook.v, action);
+      if (!Object.is(nv, hook.v)) {
+        hook.v = nv;
+        requestRender(ownerRoot);
+      }
+    }
+    return [hook.v, dispatch];
+  }
+
+  function useId() {
+    const slot = currentHookIndex;
+    const base = currentPath;
+    const hook = getHook(function () {
+      return {
+        id: "z-" + String(base).replace(/[^a-zA-Z0-9]/g, "_") + "-" + slot
+      };
+    });
+    return hook.id;
   }
 
   function depsChanged(a: any[] | null, b: any[] | null): boolean {
@@ -158,6 +185,25 @@ function zushiVmRuntime() {
     return getHook(function () {
       return { current: initial };
     });
+  }
+
+  // Context: createContext returns an object whose `.Provider` is a marker
+  // component. The reconciler detects providers and brackets the rendering of
+  // their descendants with the value pushed on a stack, so useContext reads the
+  // nearest enclosing value.
+  function createContext(defaultValue: any) {
+    const ctx: any = { _d: defaultValue, _s: [] };
+    function Provider(props: any) {
+      return props.children;
+    }
+    Provider._ctx = ctx;
+    ctx.Provider = Provider;
+    return ctx;
+  }
+
+  function useContext(ctx: any) {
+    if (!ctx) return undefined;
+    return ctx._s.length ? ctx._s[ctx._s.length - 1] : ctx._d;
   }
 
   // ---- per-surface roots ------------------------------------------------
@@ -350,6 +396,21 @@ function zushiVmRuntime() {
   }
 
   function renderComponent(node: any, path: string): any {
+    // Context provider: bracket descendant rendering with the pushed value
+    // instead of running a component body / allocating hooks.
+    const ctx = node.type._ctx;
+    if (ctx) {
+      ctx._s.push(node.props ? node.props.value : undefined);
+      let rendered: any[];
+      try {
+        rendered = renderChildren(node.children, path);
+      } finally {
+        ctx._s.pop();
+      }
+      if (rendered.length === 1) return rendered[0];
+      return { t: "div", p: {}, ev: [], c: rendered };
+    }
+
     active.visited[path] = true;
     let rec = active.componentStore[path];
     if (!rec) {
@@ -360,8 +421,10 @@ function zushiVmRuntime() {
     const isTrusted = trusted.has(node.type);
     const prevHooks = currentHooks;
     const prevIndex = currentHookIndex;
+    const prevPath = currentPath;
     currentHooks = rec.hooks;
     currentHookIndex = 0;
+    currentPath = path;
     if (isTrusted) trustDepth++;
     let output: any;
     try {
@@ -373,6 +436,7 @@ function zushiVmRuntime() {
       if (isTrusted) trustDepth--;
       currentHooks = prevHooks;
       currentHookIndex = prevIndex;
+      currentPath = prevPath;
     }
 
     // A component renders to a single subtree; reuse renderChildren so the
@@ -439,10 +503,15 @@ function zushiVmRuntime() {
   g.__zushi_createElement = createElement;
   g.registerComponent = registerComponent;
   g.useState = useState;
+  g.useReducer = useReducer;
   g.useEffect = useEffect;
+  g.useLayoutEffect = useEffect; // no separate layout phase; same semantics
   g.useMemo = useMemo;
   g.useCallback = useCallback;
   g.useRef = useRef;
+  g.useId = useId;
+  g.createContext = createContext;
+  g.useContext = useContext;
   g.render = render;
 
   if (bridge && typeof bridge.ready === "function") bridge.ready(dispatch);

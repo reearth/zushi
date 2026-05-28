@@ -219,6 +219,64 @@ describe("vm jsx runtime", () => {
     h.sandbox.dispose();
   });
 
+  test("useReducer dispatches and re-renders", async () => {
+    const h = harness(`
+      function C() {
+        const [n, dispatch] = useReducer((s, a) => (a === "inc" ? s + 1 : s), 0);
+        return createElement("button", { onClick: () => dispatch("inc") }, "n:" + n);
+      }
+      render(createElement(C, null));
+    `);
+    await h.sandbox.start();
+    expect((h.renders[0].tree[0] as any).c[0].x).toBe("n:0");
+
+    h.dispatchEvent(1, "click", {});
+    await tick();
+    expect((h.last()!.tree[0] as any).c[0].x).toBe("n:1");
+    h.sandbox.dispose();
+  });
+
+  test("useContext reads the nearest provider value (and the default)", async () => {
+    const h = harness(`
+      const Ctx = createContext("default");
+      function Child() {
+        return createElement("span", null, useContext(Ctx));
+      }
+      render(createElement("div", null,
+        createElement(Ctx.Provider, { value: "hello" }, createElement(Child, null)),
+        createElement(Child, null)
+      ));
+    `);
+    await h.sandbox.start();
+
+    const root = h.renders[0].tree[0] as any;
+    expect(root.c[0].c[0].x).toBe("hello"); // inside provider
+    expect(root.c[1].c[0].x).toBe("default"); // outside provider
+    h.sandbox.dispose();
+  });
+
+  test("useId returns stable, per-instance ids", async () => {
+    const h = harness(`
+      function Field() {
+        const id = useId();
+        return createElement("label", { htmlFor: id }, id);
+      }
+      render(createElement("div", null,
+        createElement(Field, null),
+        createElement(Field, null)
+      ));
+    `);
+    await h.sandbox.start();
+
+    const root = h.renders[0].tree[0] as any;
+    const a = root.c[0].p.htmlFor;
+    const b = root.c[1].p.htmlFor;
+    expect(typeof a).toBe("string");
+    expect(a).not.toBe(b); // distinct component instances -> distinct ids
+    expect(root.c[0].c[0].x).toBe(a); // and it's stable within the render
+    h.sandbox.dispose();
+  });
+
   test("intrinsics:false rejects raw HTML authored in plugin code", async () => {
     const h = harness(`render(createElement("div", null, "nope"));`, {
       intrinsics: false

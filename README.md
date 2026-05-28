@@ -121,7 +121,9 @@ const plugin = new Plugin({
 });
 ```
 
-- **Hooks**: `useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`.
+- **Hooks**: `useState`, `useReducer`, `useEffect`, `useLayoutEffect`,
+  `useMemo`, `useCallback`, `useRef`, `useId`, and `createContext` /
+  `useContext`.
 - **Reconciliation runs in the VM**: components and hooks are resolved to an
   intrinsic-only tree there (no per-node marshalling); only plain JSON crosses
   to the host. Event handlers never leave the VM — they're referenced by id and
