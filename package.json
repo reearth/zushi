@@ -41,7 +41,7 @@
     "@ungap/event-target": "0.2.4",
     "localforage": "1.10.0",
     "quickjs-emscripten": "0.32.0",
-    "quickjs-emscripten-sync": "1.9.0"
+    "quickjs-emscripten-sync": "1.9.1"
   },
   "peerDependencies": {
     "react": ">=18"

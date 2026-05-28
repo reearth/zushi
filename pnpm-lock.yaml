@@ -18,8 +18,8 @@ importers:
         specifier: 0.32.0
         version: 0.32.0
       quickjs-emscripten-sync:
-        specifier: 1.9.0
-        version: 1.9.0(quickjs-emscripten@0.32.0)
+        specifier: 1.9.1
+        version: 1.9.1(quickjs-emscripten@0.32.0)
     devDependencies:
       '@eslint/js':
         specifier: 9.9.1
@@ -1615,8 +1615,8 @@ packages:
   quickjs-emscripten-core@0.32.0:
     resolution: {integrity: sha512-QFnPfjFey8EqknSrSxe1hZrf1/8z7/6s1QzGOmKo6++02r7QRRX7ZoyNaZh7JuVjWsVW87KnQrbZqnHkOAzUyg==}
 
-  quickjs-emscripten-sync@1.9.0:
-    resolution: {integrity: sha512-JBy2MROxMaWEPA1emMVvaNPjp4arqg4WLc2aMKBB1ujKuBedJlbxD/KEJQJ1CeicJ1P1fUu5id7pUW2JMdeUIg==}
+  quickjs-emscripten-sync@1.9.1:
+    resolution: {integrity: sha512-nXiGTCwjhae8POng/Oh5ZKV+BkscXM1toSenC7QO2VEFBUKi4+NMuywgtwKD7qnRc9Vpgysdov0noOHsQPP1Nw==}
     engines: {node: '>=12'}
     peerDependencies:
       quickjs-emscripten: '*'
@@ -3437,7 +3437,7 @@ snapshots:
     dependencies:
       '@jitl/quickjs-ffi-types': 0.32.0
 
-  quickjs-emscripten-sync@1.9.0(quickjs-emscripten@0.32.0):
+  quickjs-emscripten-sync@1.9.1(quickjs-emscripten@0.32.0):
     dependencies:
       quickjs-emscripten: 0.32.0
 
