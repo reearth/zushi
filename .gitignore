@@ -5,3 +5,4 @@ dist
 coverage
 
 examples/dist
+examples/__screenshots__
