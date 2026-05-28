@@ -2,6 +2,7 @@ import { type PluginContext, Plugin } from "@reearth/zushi";
 import { PluginView } from "@reearth/zushi/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { jsxComponents, jsxPluginSource } from "./jsxPluginSource";
 import { type ExampleHost, pluginSource } from "./pluginSource";
 import { quickjs } from "./quickjs";
 
@@ -96,6 +97,41 @@ function VanillaExample() {
   );
 }
 
+// Opt-in JSX runtime: the plugin builds UI declaratively with createElement +
+// hooks, confined to host-registered components (intrinsics disabled).
+function JsxExample() {
+  const { log, host } = useHostLog();
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
+  const exposed = useCallback(
+    (_ctx: PluginContext) => ({
+      host: {
+        event: (name: string, value?: number) =>
+          hostRef.current.event(name, value)
+      }
+    }),
+    []
+  );
+
+  return (
+    <section className="card">
+      <h2>JSX · render(&lt;App/&gt;)</h2>
+      <PluginView
+        jsx
+        components={jsxComponents}
+        intrinsics={false}
+        code={jsxPluginSource}
+        quickjs={quickjs}
+        autoResize="both"
+        exposed={exposed}
+        className="frame"
+      />
+      <Log entries={log} />
+    </section>
+  );
+}
+
 export function App() {
   return (
     <main>
@@ -108,6 +144,7 @@ export function App() {
       <div className="grid">
         <ReactExample />
         <VanillaExample />
+        <JsxExample />
       </div>
     </main>
   );

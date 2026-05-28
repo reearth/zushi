@@ -56,6 +56,11 @@ export type SandboxOptions = {
   isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
   /** API object (or factory) injected as globals into the VM. */
   exposed?: Exposed;
+  /**
+   * Trusted source evaluated in the VM *before* the plugin code. Used to
+   * install host-provided runtimes (e.g. the JSX layer) as VM globals.
+   */
+  bootstrap?: string;
   onError?: (err: any) => void;
   onPreInit?: () => void;
   onDispose?: () => void;
@@ -152,6 +157,7 @@ export class Sandbox {
     const e = typeof exposed === "function" ? exposed(bridge) : exposed;
     if (e) this.arenaRef.expose(e);
 
+    if (this.options.bootstrap) this.evalCode(this.options.bootstrap);
     this.evalCode(code);
     this._loaded = true;
   }

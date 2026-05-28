@@ -11,3 +11,11 @@ export {
   type PluginOptions,
   type PluginContext
 } from "./plugin";
+export {
+  type VNode,
+  type SNode,
+  type SEvent,
+  type RenderPayload,
+  type EventPayload,
+  type SerializedEvent
+} from "./jsx";

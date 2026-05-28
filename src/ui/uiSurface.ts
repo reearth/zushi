@@ -19,6 +19,12 @@ export type UISurfaceOptions = {
   visible?: boolean;
   /** Called after a message arrives so the VM job loop can be pumped. */
   startEventLoop?: () => void;
+  /**
+   * Given first crack at every incoming iframe message. Returning `true`
+   * marks the message as consumed so it is not emitted as a `message` event.
+   * Used by the JSX layer to keep its protocol off the plugin message channel.
+   */
+  onProtocolMessage?: (data: any) => boolean;
 };
 
 /** The shape exposed to plugins as `reearth.ui`. */
@@ -43,18 +49,22 @@ export class UISurface {
 
   private emit: EventEmitter<UIEvents>;
   private startEventLoop?: () => void;
+  private onProtocolMessage?: (data: any) => boolean;
   private html = "";
   private options: UIShowOptions = {};
 
   constructor(opts: UISurfaceOptions) {
     [this.events, this.emit] = events<UIEvents>();
     this.startEventLoop = opts.startEventLoop;
+    this.onProtocolMessage = opts.onProtocolMessage;
     this.frame = new SafeIFrame({
       container: opts.container,
       autoResize: opts.autoResize,
       visible: opts.visible,
       onMessage: (data) => {
-        this.emit("message", data);
+        if (!this.onProtocolMessage?.(data)) {
+          this.emit("message", data);
+        }
         this.startEventLoop?.();
       }
     });

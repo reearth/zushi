@@ -101,6 +101,79 @@ function MyPlugin() {
 }
 ```
 
+## JSX UI (opt-in)
+
+Instead of pushing HTML strings with `ui.show(...)`, plugins can build UI
+declaratively with a small React-like runtime that runs **inside the VM**. Pass
+`jsx: true` to enable it; it's off by default and doesn't affect `ui.show`.
+
+```ts
+const plugin = new Plugin({
+  container,
+  jsx: true,
+  code: `
+    function Counter() {
+      const [n, setN] = useState(0);
+      return h("button", { onClick: () => setN(n + 1) }, "count: " + n);
+    }
+    render(h(Counter));   // mounts into the main UI iframe
+  `
+});
+```
+
+- **Hooks**: `useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`.
+- **Reconciliation runs in the VM**: components and hooks are resolved to an
+  intrinsic-only tree there (no per-node marshalling); only plain JSON crosses
+  to the host. Event handlers never leave the VM — they're referenced by id and
+  invoked when the iframe reports a DOM event. A tiny patcher in the iframe
+  diffs (keyed) and patches real DOM, so input focus/caret survive re-renders.
+- **Surfaces**: `render(el, { surface: "modal" })` (or `"popup"`) targets the
+  other iframes; each reconciles independently.
+
+### Writing JSX
+
+zushi doesn't transpile JSX — it only ships the runtime functions. Wire them up
+whichever way your build prefers:
+
+```ts
+// 1) Classic pragma — no imports, uses the VM globals.
+/** @jsx createElement */
+/** @jsxFrag Fragment */
+
+// 2) Automatic runtime — set jsxImportSource to "@reearth/zushi"
+//    (tsconfig / esbuild / vite). Resolves to @reearth/zushi/jsx-runtime.
+
+// 3) Explicit import (for bundled plugins).
+import { render, useState, createElement, Fragment } from "@reearth/zushi/jsx";
+```
+
+All three produce the same `createElement` calls and run against the in-VM
+runtime; for plugins evaluated as a raw source string, the names are also
+available as bare globals.
+
+### Custom components & restricting HTML
+
+The host can register trusted custom components (à la Figma's `View`/`Text`) and
+optionally forbid raw HTML in plugin code, so plugins are confined to a curated
+component vocabulary:
+
+```ts
+new Plugin({
+  jsx: true,
+  intrinsics: false, // plugins may not use raw HTML tags…
+  components: `
+    // …but trusted components, run in the VM before the plugin, may.
+    registerComponent("View", (p) =>
+      h("div", { style: { display: "flex", gap: p.gap, ...p.style } }, p.children));
+    registerComponent("Text", (p) => h("span", { style: p.style }, p.children));
+  `,
+  code: `render(h(View, { gap: 8 }, h(Text, null, "hello")));`
+});
+```
+
+`intrinsics` accepts `true` (any tag, default), `false` (none), or an allowlist
+of tag names. Tags emitted *inside* a registered component are always allowed.
+
 ## Architecture
 
 ```
@@ -118,6 +191,7 @@ untrusted plugin code
 | `ui/`       | `UISurface`, `createConsole`    | `ui`/`modal`/`popup` API built on `SafeIFrame`            |
 | `events/`   | `events`, `mergeEvents`         | Typed event emitter (QuickJS-marshal-stable via fingerprint) |
 | `storage/`  | `ClientStorage`                 | Per-instance IndexedDB key-value store                    |
+| `jsx/`      | `VM_RUNTIME_SOURCE`, `JsxHost`  | Opt-in in-VM JSX runtime + iframe DOM patcher (`jsx: true`) |
 | top-level   | `Plugin`                        | Orchestrates the three UI surfaces + VM + default expose  |
 | `/react`    | `usePlugin`, `PluginView`      | React adapter                                             |
 
@@ -139,7 +213,7 @@ See [`src/security.test.ts`](./src/security.test.ts) for the escape tests.
 ## Examples
 
 ```sh
-pnpm example   # Vite dev server: React (<PluginView>) + vanilla (new Plugin())
+pnpm example   # Vite dev server: React (<PluginView>) + vanilla + JSX runtime
 ```
 
 See [`examples/`](./examples). The example's plugin lives in a shared module

@@ -1,6 +1,7 @@
 import { Sandbox, type SandboxBridge, type SandboxOptions } from "./runtime";
 import { createConsole, UISurface } from "./ui";
 import type { AutoResize } from "./iframe";
+import { JsxHost, VM_RUNTIME_SOURCE, type IntrinsicsPolicy } from "./jsx";
 import { merge } from "./utils/merge";
 
 /**
@@ -27,6 +28,28 @@ export type PluginOptions = {
   popupContainer?: HTMLElement;
   /** Auto-resize behavior for the main UI iframe. */
   autoResize?: AutoResize;
+  /**
+   * Opt in to the JSX UI runtime. When enabled, a `createElement`/`Fragment`,
+   * hooks (`useState`, `useEffect`, ...) and a `render()` global are installed
+   * in the VM, and `render(<App/>)` drives the main UI iframe declaratively.
+   * Off by default; the plain `ui.show(html)` path is unaffected.
+   */
+  jsx?: boolean;
+  /**
+   * Trusted JS source, evaluated in the VM after the JSX runtime and before the
+   * plugin, used to register custom components via `registerComponent(name, fn)`
+   * (à la Figma's `View`/`Text`). Markup these components emit may use intrinsic
+   * tags even when {@link intrinsics} forbids them in plugin code. Requires
+   * {@link jsx}.
+   */
+  components?: string;
+  /**
+   * Gates plugin-authored intrinsic (HTML) tags: `true` (default, any), `false`
+   * (none — plugins must use registered components), or an allowlist of tags.
+   * Tags emitted inside registered components are always allowed. Requires
+   * {@link jsx}.
+   */
+  intrinsics?: IntrinsicsPolicy;
   /** Builds the host-specific API merged into the exposed globals. */
   exposed?: (ctx: PluginContext) => Record<string, any>;
   /** QuickJS WASM module/variant override (see {@link SandboxOptions.quickjs}). */
@@ -50,6 +73,7 @@ export class Plugin {
   readonly sandbox: Sandbox;
 
   private ownedContainers: HTMLElement[] = [];
+  private jsxHost?: JsxHost;
 
   constructor(options: PluginOptions) {
     const startEventLoop = () => this.sandbox?.requestEventLoop();
@@ -61,35 +85,51 @@ export class Plugin {
       container: options.container,
       autoResize: options.autoResize,
       visible: true,
-      startEventLoop
+      startEventLoop,
+      onProtocolMessage: (data) => this.jsxHost?.handle("ui", data) ?? false
     });
     this.modal = new UISurface({
       container: modalContainer,
       visible: true,
-      startEventLoop
+      startEventLoop,
+      onProtocolMessage: (data) => this.jsxHost?.handle("modal", data) ?? false
     });
     this.popup = new UISurface({
       container: popupContainer,
       visible: true,
-      startEventLoop
+      startEventLoop,
+      onProtocolMessage: (data) => this.jsxHost?.handle("popup", data) ?? false
     });
+
+    if (options.jsx) {
+      this.jsxHost = new JsxHost({
+        surfaces: { ui: this.ui, modal: this.modal, popup: this.popup },
+        intrinsics: options.intrinsics
+      });
+    }
+
+    const bootstrap = options.jsx
+      ? VM_RUNTIME_SOURCE + (options.components ? "\n;" + options.components : "")
+      : undefined;
 
     this.sandbox = new Sandbox({
       code: options.code,
       src: options.src,
       quickjs: options.quickjs,
       isMarshalable: options.isMarshalable,
+      bootstrap,
       onError: options.onError,
       onPreInit: options.onPreInit,
       onDispose: options.onDispose,
       onMessage: options.onMessage,
       exposed: (bridge) => {
-        const base = {
+        const base: Record<string, any> = {
           console: createConsole(),
           ui: this.ui.uiAPI,
           modal: this.modal.modalAPI,
           popup: this.popup.modalAPI
         };
+        if (this.jsxHost) base.__zushi = this.jsxHost.bridge;
         const host =
           options.exposed?.({
             ui: this.ui,

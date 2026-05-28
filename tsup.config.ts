@@ -3,7 +3,10 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
-    react: "src/react/index.ts"
+    react: "src/react/index.ts",
+    jsx: "src/jsx/runtime.ts",
+    "jsx-runtime": "src/jsx/jsx-runtime.ts",
+    "jsx-dev-runtime": "src/jsx/jsx-dev-runtime.ts"
   },
   format: ["esm"],
   dts: true,
