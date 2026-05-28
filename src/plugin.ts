@@ -1,4 +1,4 @@
-import { Sandbox, type SandboxBridge } from "./runtime";
+import { Sandbox, type SandboxBridge, type SandboxOptions } from "./runtime";
 import { createConsole, UISurface } from "./ui";
 import type { AutoResize } from "./iframe";
 import { merge } from "./utils/merge";
@@ -29,6 +29,8 @@ export type PluginOptions = {
   autoResize?: AutoResize;
   /** Builds the host-specific API merged into the exposed globals. */
   exposed?: (ctx: PluginContext) => Record<string, any>;
+  /** QuickJS WASM module/variant override (see {@link SandboxOptions.quickjs}). */
+  quickjs?: SandboxOptions["quickjs"];
   isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
   onError?: (err: any) => void;
   onPreInit?: () => void;
@@ -75,6 +77,7 @@ export class Plugin {
     this.sandbox = new Sandbox({
       code: options.code,
       src: options.src,
+      quickjs: options.quickjs,
       isMarshalable: options.isMarshalable,
       onError: options.onError,
       onPreInit: options.onPreInit,

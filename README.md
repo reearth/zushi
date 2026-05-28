@@ -57,6 +57,21 @@ await plugin.start();
 plugin.dispose();
 ```
 
+### Choosing a QuickJS variant (browsers/bundlers)
+
+By default the VM loads via `getQuickJS()`, which fetches a separate `.wasm`
+file. In a bundler/browser it's often easier to use a **singlefile** variant
+that embeds the wasm, avoiding a separate fetch:
+
+```ts
+import variant from "@jitl/quickjs-singlefile-browser-release-sync";
+import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten";
+
+const quickjs = newQuickJSWASMModuleFromVariant(variant);
+
+const plugin = new Plugin({ container, code, quickjs }); // pass it through
+```
+
 ### React
 
 ```tsx
@@ -119,14 +134,27 @@ untrusted plugin code
 
 See [`src/security.test.ts`](./src/security.test.ts) for the escape tests.
 
+## Examples
+
+```sh
+pnpm example   # Vite dev server: React (<NichePlugin>) + vanilla (new Plugin())
+```
+
+See [`examples/`](./examples). The example's plugin lives in a shared module
+([`examples/src/pluginSource.ts`](./examples/src/pluginSource.ts)) that is also
+driven by a real-browser regression test
+([`examples/regression.browser.test.ts`](./examples/regression.browser.test.ts)) —
+so the example doubles as an end-to-end regression of the whole pipeline.
+
 ## Testing
 
 - `pnpm test` — unit/logic tests in jsdom (VM behavior is real QuickJS; iframe
   DOM behavior is stubbed).
 - `pnpm test:browser` — real-browser tests (Vitest browser mode / Playwright
   Chromium) that actually load iframe `srcdoc`, run injected scripts, exchange
-  real `postMessage`s, exercise `ResizeObserver` auto-resize, and verify the
-  sandbox isolation. Requires `npx playwright install chromium` once.
+  real `postMessage`s, exercise `ResizeObserver` auto-resize, verify sandbox
+  isolation, and run the example end-to-end. Requires `npx playwright install
+  chromium` once.
 - `pnpm test:all` — both.
 
 ## License

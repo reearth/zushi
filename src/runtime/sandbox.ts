@@ -1,4 +1,4 @@
-import { getQuickJS } from "quickjs-emscripten";
+import { getQuickJS, type QuickJSWASMModule } from "quickjs-emscripten";
 import { Arena } from "quickjs-emscripten-sync";
 
 const AsyncFunction = (async () => {}).constructor;
@@ -45,6 +45,13 @@ export type SandboxOptions = {
   code?: string;
   /** URL to fetch plugin source from. */
   src?: string;
+  /**
+   * The QuickJS WASM module (or a promise for it). Defaults to `getQuickJS()`
+   * (the release-sync wasmfile variant). Provide a different variant for
+   * environments where a separate `.wasm` fetch is undesirable — e.g. a
+   * singlefile variant for bundlers/browsers.
+   */
+  quickjs?: QuickJSWASMModule | Promise<QuickJSWASMModule>;
   /** Additional marshalability rule, OR'd with the default. */
   isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
   /** API object (or factory) injected as globals into the VM. */
@@ -117,7 +124,10 @@ export class Sandbox {
 
     this.options.onPreInit?.();
 
-    const ctx = (await getQuickJS()).newContext();
+    const mod = this.options.quickjs
+      ? await this.options.quickjs
+      : await getQuickJS();
+    const ctx = mod.newContext();
     if (this.disposed) {
       ctx.dispose();
       return;
