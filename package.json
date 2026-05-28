@@ -40,8 +40,8 @@
   "dependencies": {
     "@ungap/event-target": "0.2.4",
     "localforage": "1.10.0",
-    "quickjs-emscripten": "0.31.0",
-    "quickjs-emscripten-sync": "1.8.4"
+    "quickjs-emscripten": "0.32.0",
+    "quickjs-emscripten-sync": "1.9.0"
   },
   "peerDependencies": {
     "react": ">=18"
@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.9.1",
-    "@jitl/quickjs-singlefile-browser-release-sync": "0.31.0",
+    "@jitl/quickjs-singlefile-browser-release-sync": "0.32.0",
     "@types/node": "22.5.0",
     "@types/react": "18.3.1",
     "@types/react-dom": "18.3.1",
