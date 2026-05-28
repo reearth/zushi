@@ -7,8 +7,8 @@ const root = import.meta.dirname;
 export default defineConfig({
   resolve: {
     alias: {
-      "@reearth/niche/react": resolve(root, "src/react/index.ts"),
-      "@reearth/niche": resolve(root, "src/index.ts")
+      "@reearth/zushi/react": resolve(root, "src/react/index.ts"),
+      "@reearth/zushi": resolve(root, "src/index.ts")
     }
   },
   test: {

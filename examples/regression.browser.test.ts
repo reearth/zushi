@@ -1,4 +1,4 @@
-import { Plugin } from "@reearth/niche";
+import { Plugin } from "@reearth/zushi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { pluginSource } from "./src/pluginSource";

@@ -125,7 +125,7 @@ export class SafeIFrame {
     try {
       cloned = JSON.parse(JSON.stringify(message));
     } catch (err) {
-      console.error("niche: failed to serialize message", err);
+      console.error("zushi: failed to serialize message", err);
       return;
     }
     if (this.iframe && this.loaded && this.iframe.contentWindow) {

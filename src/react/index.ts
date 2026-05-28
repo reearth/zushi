@@ -3,5 +3,5 @@ export {
   type UsePluginOptions,
   type UsePluginResult
 } from "./usePlugin";
-export { NichePlugin, type NichePluginProps } from "./NichePlugin";
+export { PluginView, type PluginViewProps } from "./PluginView";
 export { useEmit } from "./useEmit";

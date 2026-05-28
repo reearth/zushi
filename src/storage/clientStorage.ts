@@ -11,12 +11,12 @@ export type ClientStorageAPI = {
 export type ClientStorageOptions = {
   /**
    * Resolves a localforage store name from a plugin instance id.
-   * Defaults to `niche-plugin-${instanceId}`.
+   * Defaults to `zushi-plugin-${instanceId}`.
    */
   storeName?: (instanceId: string) => string;
 };
 
-const defaultStoreName = (instanceId: string) => `niche-plugin-${instanceId}`;
+const defaultStoreName = (instanceId: string) => `zushi-plugin-${instanceId}`;
 
 /**
  * Per-instance key-value storage backed by IndexedDB (via localforage).

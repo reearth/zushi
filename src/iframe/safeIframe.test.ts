@@ -42,7 +42,7 @@ describe("SafeIFrame", () => {
     const frame = new SafeIFrame({ container });
     frame.render("<body><p>x</p></body>");
     const iframe = container.querySelector("iframe")!;
-    expect(iframe.srcdoc).toContain("_niche_resize");
+    expect(iframe.srcdoc).toContain("_zushi_resize");
     expect(iframe.srcdoc).toContain("ResizeObserver");
     frame.dispose();
   });

@@ -15,7 +15,7 @@ export type UsePluginResult<T extends HTMLElement = HTMLDivElement> = {
 };
 
 /**
- * Runs a niche Plugin tied to a React element's lifecycle. The VM is
+ * Runs a zushi Plugin tied to a React element's lifecycle. The VM is
  * (re)initialized when `code` or `src` changes and disposed on unmount.
  */
 export function usePlugin<T extends HTMLElement = HTMLDivElement>(

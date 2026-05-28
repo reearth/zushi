@@ -11,7 +11,7 @@ export const insertToBody = (
 };
 
 export const autoResizeScript = (autoResizeMessageKey: string): string => {
-  return `<script id="_niche_resize">
+  return `<script id="_zushi_resize">
       if ("ResizeObserver" in window) {
         new window.ResizeObserver(entries => {
           const win = document.defaultView;

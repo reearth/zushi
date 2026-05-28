@@ -63,7 +63,7 @@ export type SandboxOptions = {
 };
 
 const defaultOnError = (err: any) => {
-  console.error("niche plugin error", err);
+  console.error("zushi plugin error", err);
 };
 
 /**
@@ -203,7 +203,7 @@ export class Sandbox {
         this.arenaRef.dispose();
         this.arenaRef.context.dispose();
       } catch (err) {
-        console.debug("niche: quickjs dispose error", err);
+        console.debug("zushi: quickjs dispose error", err);
       } finally {
         this.arenaRef = undefined;
       }

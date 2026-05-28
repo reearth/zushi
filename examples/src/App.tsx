@@ -1,5 +1,5 @@
-import { type PluginContext, Plugin } from "@reearth/niche";
-import { NichePlugin } from "@reearth/niche/react";
+import { type PluginContext, Plugin } from "@reearth/zushi";
+import { PluginView } from "@reearth/zushi/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type ExampleHost, pluginSource } from "./pluginSource";
@@ -30,7 +30,7 @@ function Log({ entries }: { entries: string[] }) {
   );
 }
 
-// React usage via <NichePlugin>.
+// React usage via <PluginView>.
 function ReactExample() {
   const { log, host } = useHostLog();
   const hostRef = useRef(host);
@@ -48,8 +48,8 @@ function ReactExample() {
 
   return (
     <section className="card">
-      <h2>React · &lt;NichePlugin&gt;</h2>
-      <NichePlugin
+      <h2>React · &lt;PluginView&gt;</h2>
+      <PluginView
         code={pluginSource}
         quickjs={quickjs}
         autoResize="both"
@@ -99,7 +99,7 @@ function VanillaExample() {
 export function App() {
   return (
     <main>
-      <h1>@reearth/niche examples</h1>
+      <h1>@reearth/zushi examples</h1>
       <p>
         Click <strong>+1</strong> inside each sandboxed iframe. The click is sent
         to the plugin VM, which calls the host API and posts the new count back

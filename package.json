@@ -1,11 +1,11 @@
 {
-  "name": "@reearth/niche",
+  "name": "@reearth/zushi",
   "version": "0.0.0",
   "description": "A framework-agnostic plugin runtime: run untrusted JS in a QuickJS (WASM) VM, expose a host-defined API, and render plugin UI in sandboxed iframes.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/reearth/niche.git"
+    "url": "git+https://github.com/reearth/zushi.git"
   },
   "type": "module",
   "sideEffects": false,

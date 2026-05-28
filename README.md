@@ -1,4 +1,4 @@
-# @reearth/niche
+# @reearth/zushi
 
 A framework-agnostic plugin runtime for the browser. Run untrusted JavaScript in
 a [QuickJS](https://github.com/justjake/quickjs-emscripten) (WASM) VM, expose a
@@ -20,19 +20,19 @@ isolation:
    so plugin UI is rendered in an opaque origin and talks to the host only via
    `postMessage`.
 
-niche packages both layers plus the wiring between them, and lets you expose any
+zushi packages both layers plus the wiring between them, and lets you expose any
 host API you like into the VM.
 
 ## Install
 
 ```sh
-npm install @reearth/niche
+npm install @reearth/zushi
 ```
 
 ## Quick start
 
 ```ts
-import { Plugin } from "@reearth/niche";
+import { Plugin } from "@reearth/zushi";
 
 const plugin = new Plugin({
   container: document.getElementById("plugin-ui")!,
@@ -75,11 +75,11 @@ const plugin = new Plugin({ container, code, quickjs }); // pass it through
 ### React
 
 ```tsx
-import { NichePlugin } from "@reearth/niche/react";
+import { PluginView } from "@reearth/zushi/react";
 
 function MyPlugin() {
   return (
-    <NichePlugin
+    <PluginView
       code={pluginSource}
       style={{ width: 320, height: 240 }}
       exposed={({ ui }) => ({ reearth: { ui: ui.uiAPI } })}
@@ -91,7 +91,7 @@ function MyPlugin() {
 Or use the hook directly:
 
 ```tsx
-import { usePlugin } from "@reearth/niche/react";
+import { usePlugin } from "@reearth/zushi/react";
 
 function MyPlugin() {
   const { containerRef, getPlugin } = usePlugin({ code: pluginSource });
@@ -117,7 +117,7 @@ untrusted plugin code
 | `events/`   | `events`, `mergeEvents`         | Typed event emitter (QuickJS-marshal-stable via fingerprint) |
 | `storage/`  | `ClientStorage`                 | Per-instance IndexedDB key-value store                    |
 | top-level   | `Plugin`                        | Orchestrates the three UI surfaces + VM + default expose  |
-| `/react`    | `usePlugin`, `NichePlugin`      | React adapter                                             |
+| `/react`    | `usePlugin`, `PluginView`      | React adapter                                             |
 
 ## Security model
 
@@ -137,7 +137,7 @@ See [`src/security.test.ts`](./src/security.test.ts) for the escape tests.
 ## Examples
 
 ```sh
-pnpm example   # Vite dev server: React (<NichePlugin>) + vanilla (new Plugin())
+pnpm example   # Vite dev server: React (<PluginView>) + vanilla (new Plugin())
 ```
 
 See [`examples/`](./examples). The example's plugin lives in a shared module
