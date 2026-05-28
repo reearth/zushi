@@ -1,0 +1,71 @@
+{
+  "name": "@reearth/niche",
+  "version": "0.0.0",
+  "description": "A framework-agnostic plugin runtime: run untrusted JS in a QuickJS (WASM) VM, expose a host-defined API, and render plugin UI in sandboxed iframes.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reearth/niche.git"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "test:all": "pnpm test && pnpm test:browser",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@ungap/event-target": "0.2.4",
+    "localforage": "1.10.0",
+    "quickjs-emscripten": "0.24.0",
+    "quickjs-emscripten-sync": "1.5.2"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "9.9.1",
+    "@types/react": "18.3.1",
+    "@vitest/browser": "3.1.1",
+    "eslint": "9.9.1",
+    "jsdom": "25.0.0",
+    "playwright": "1.48.0",
+    "prettier": "3.3.3",
+    "react": "18.3.1",
+    "tsup": "8.2.4",
+    "typescript": "5.5.4",
+    "typescript-eslint": "8.0.0",
+    "vitest": "3.1.1"
+  },
+  "packageManager": "pnpm@10.5.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}

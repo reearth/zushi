@@ -1,0 +1,117 @@
+import { events, type EventEmitter, type Events } from "../events";
+import { SafeIFrame, type AutoResize } from "../iframe";
+
+export type UIEvents = {
+  message: [message: any];
+  close: [];
+};
+
+export type UIShowOptions = {
+  visible?: boolean;
+  width?: number | string;
+  height?: number | string;
+};
+
+export type UISurfaceOptions = {
+  /** Element the surface's iframe mounts into. */
+  container: HTMLElement;
+  autoResize?: AutoResize;
+  visible?: boolean;
+  /** Called after a message arrives so the VM job loop can be pumped. */
+  startEventLoop?: () => void;
+};
+
+/** The shape exposed to plugins as `reearth.ui`. */
+export type UIAPI = Pick<
+  UISurface,
+  "show" | "postMessage" | "resize" | "close" | "on" | "off"
+>;
+
+/** The shape exposed to plugins as `reearth.modal` / `reearth.popup`. */
+export type ModalAPI = Pick<
+  UISurface,
+  "show" | "postMessage" | "update" | "close" | "on" | "off"
+>;
+
+/**
+ * A plugin UI surface (main UI, modal, or popup) backed by a sandboxed iframe.
+ * Plugins render HTML into it and exchange messages with it.
+ */
+export class UISurface {
+  readonly frame: SafeIFrame;
+  readonly events: Events<UIEvents>;
+
+  private emit: EventEmitter<UIEvents>;
+  private startEventLoop?: () => void;
+  private html = "";
+  private options: UIShowOptions = {};
+
+  constructor(opts: UISurfaceOptions) {
+    [this.events, this.emit] = events<UIEvents>();
+    this.startEventLoop = opts.startEventLoop;
+    this.frame = new SafeIFrame({
+      container: opts.container,
+      autoResize: opts.autoResize,
+      visible: opts.visible,
+      onMessage: (data) => {
+        this.emit("message", data);
+        this.startEventLoop?.();
+      }
+    });
+  }
+
+  show = (html: string, options: UIShowOptions = {}): void => {
+    this.html = html;
+    this.options = options;
+    this.frame.render(html, options);
+  };
+
+  update = (options: UIShowOptions): void => {
+    this.options = { ...this.options, ...options };
+    this.frame.render(this.html, this.options);
+  };
+
+  resize = (width?: number | string, height?: number | string): void => {
+    this.frame.resize(width, height);
+  };
+
+  postMessage = (message: any): void => {
+    this.frame.postMessage(message);
+  };
+
+  close = (): void => {
+    this.frame.setVisible(false);
+    this.emit("close");
+    this.startEventLoop?.();
+  };
+
+  on = <T extends keyof UIEvents>(
+    type: T,
+    cb: (...args: UIEvents[T]) => void
+  ): void => {
+    this.events.on(type, cb);
+  };
+
+  off = <T extends keyof UIEvents>(
+    type: T,
+    cb: (...args: UIEvents[T]) => void
+  ): void => {
+    this.events.off(type, cb);
+  };
+
+  dispose(): void {
+    this.frame.dispose();
+  }
+
+  /** API surface for a main UI (`show`/`resize`, no `update`). */
+  get uiAPI(): UIAPI {
+    const { show, postMessage, resize, close, on, off } = this;
+    return { show, postMessage, resize, close, on, off };
+  }
+
+  /** API surface for a modal/popup (`update`, no `resize`). */
+  get modalAPI(): ModalAPI {
+    const { show, postMessage, update, close, on, off } = this;
+    return { show, postMessage, update, close, on, off };
+  }
+}
