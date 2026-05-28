@@ -27,16 +27,10 @@ export type UISurfaceOptions = {
   onProtocolMessage?: (data: any) => boolean;
 };
 
-/** The shape exposed to plugins as `reearth.ui`. */
-export type UIAPI = Pick<
+/** The method surface a host typically exposes to plugins for a UI surface. */
+export type SurfaceAPI = Pick<
   UISurface,
-  "show" | "postMessage" | "resize" | "close" | "on" | "off"
->;
-
-/** The shape exposed to plugins as `reearth.modal` / `reearth.popup`. */
-export type ModalAPI = Pick<
-  UISurface,
-  "show" | "postMessage" | "update" | "close" | "on" | "off"
+  "show" | "postMessage" | "resize" | "update" | "close" | "on" | "off"
 >;
 
 /**
@@ -113,15 +107,9 @@ export class UISurface {
     this.frame.dispose();
   }
 
-  /** API surface for a main UI (`show`/`resize`, no `update`). */
-  get uiAPI(): UIAPI {
-    const { show, postMessage, resize, close, on, off } = this;
-    return { show, postMessage, resize, close, on, off };
-  }
-
-  /** API surface for a modal/popup (`update`, no `resize`). */
-  get modalAPI(): ModalAPI {
-    const { show, postMessage, update, close, on, off } = this;
-    return { show, postMessage, update, close, on, off };
+  /** The method surface a host typically exposes to plugins. */
+  get api(): SurfaceAPI {
+    const { show, postMessage, resize, update, close, on, off } = this;
+    return { show, postMessage, resize, update, close, on, off };
   }
 }

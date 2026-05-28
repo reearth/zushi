@@ -4,15 +4,28 @@ import type { AutoResize } from "./iframe";
 import { JsxHost, VM_RUNTIME_SOURCE, type IntrinsicsPolicy } from "./jsx";
 import { merge } from "./utils/merge";
 
+/** Configuration for a single named UI surface. */
+export type SurfaceConfig = {
+  /**
+   * Element the surface's iframe mounts into. If omitted, a hidden container is
+   * created in `<body>` (useful for off-screen surfaces like modals).
+   */
+  container?: HTMLElement;
+  /** Auto-resize behavior for this surface's iframe. */
+  autoResize?: AutoResize;
+  /** Initial visibility (default `true`). */
+  visible?: boolean;
+};
+
 /**
- * Context passed to the host `exposed` factory. Provides the three UI surfaces
- * plus the VM bridge so hosts can build their own API (e.g. `reearth.*`) and
- * have it merged alongside the built-in `console`/`ui`/`modal`/`popup`.
+ * Context passed to the host `exposed` factory. Surfaces are not auto-exposed
+ * into the VM — the host wires them up here under whatever names it likes
+ * (e.g. `reearth.ui = surfaces.main.api`), merged alongside the built-in
+ * `console`.
  */
 export type PluginContext = SandboxBridge & {
-  ui: UISurface;
-  modal: UISurface;
-  popup: UISurface;
+  /** The surfaces declared via {@link PluginOptions.surfaces}, keyed by name. */
+  surfaces: Record<string, UISurface>;
 };
 
 export type PluginOptions = {
@@ -20,19 +33,17 @@ export type PluginOptions = {
   code?: string;
   /** URL to fetch plugin source from. */
   src?: string;
-  /** Element the main UI iframe mounts into. */
-  container: HTMLElement;
-  /** Element the modal iframe mounts into. Created in <body> if omitted. */
-  modalContainer?: HTMLElement;
-  /** Element the popup iframe mounts into. Created in <body> if omitted. */
-  popupContainer?: HTMLElement;
-  /** Auto-resize behavior for the main UI iframe. */
-  autoResize?: AutoResize;
   /**
-   * Opt in to the JSX UI runtime. When enabled, a `createElement`/`Fragment`,
+   * The named UI surfaces to create. None are created by default — the host
+   * declares exactly the surfaces it needs and exposes them via {@link exposed}.
+   */
+  surfaces?: Record<string, SurfaceConfig>;
+  /**
+   * Opt in to the JSX UI runtime. When enabled, `createElement`/`Fragment`,
    * hooks (`useState`, `useEffect`, ...) and a `render()` global are installed
-   * in the VM, and `render(<App/>)` drives the main UI iframe declaratively.
-   * Off by default; the plain `ui.show(html)` path is unaffected.
+   * in the VM, and `render(<App/>, { surface })` drives a surface's iframe
+   * declaratively. Off by default; the plain `surface.show(html)` path is
+   * unaffected.
    */
   jsx?: boolean;
   /**
@@ -62,14 +73,13 @@ export type PluginOptions = {
 };
 
 /**
- * High-level orchestrator: wires three sandboxed UI surfaces (ui/modal/popup)
- * to a QuickJS VM and exposes a default `{ console, ui, modal, popup }` global,
- * merged with any host-provided API.
+ * High-level orchestrator: creates the host-declared sandboxed UI surfaces,
+ * wires them to a QuickJS VM, and exposes a default `{ console }` global merged
+ * with any host-provided API. Surfaces are handed to the host via the `exposed`
+ * factory rather than auto-exposed.
  */
 export class Plugin {
-  readonly ui: UISurface;
-  readonly modal: UISurface;
-  readonly popup: UISurface;
+  readonly surfaces: Record<string, UISurface> = {};
   readonly sandbox: Sandbox;
 
   private ownedContainers: HTMLElement[] = [];
@@ -78,32 +88,21 @@ export class Plugin {
   constructor(options: PluginOptions) {
     const startEventLoop = () => this.sandbox?.requestEventLoop();
 
-    const modalContainer = options.modalContainer ?? this.createContainer();
-    const popupContainer = options.popupContainer ?? this.createContainer();
-
-    this.ui = new UISurface({
-      container: options.container,
-      autoResize: options.autoResize,
-      visible: true,
-      startEventLoop,
-      onProtocolMessage: (data) => this.jsxHost?.handle("ui", data) ?? false
-    });
-    this.modal = new UISurface({
-      container: modalContainer,
-      visible: true,
-      startEventLoop,
-      onProtocolMessage: (data) => this.jsxHost?.handle("modal", data) ?? false
-    });
-    this.popup = new UISurface({
-      container: popupContainer,
-      visible: true,
-      startEventLoop,
-      onProtocolMessage: (data) => this.jsxHost?.handle("popup", data) ?? false
-    });
+    const configs = options.surfaces ?? {};
+    for (const name of Object.keys(configs)) {
+      const cfg = configs[name];
+      this.surfaces[name] = new UISurface({
+        container: cfg.container ?? this.createContainer(),
+        autoResize: cfg.autoResize,
+        visible: cfg.visible ?? true,
+        startEventLoop,
+        onProtocolMessage: (data) => this.jsxHost?.handle(name, data) ?? false
+      });
+    }
 
     if (options.jsx) {
       this.jsxHost = new JsxHost({
-        surfaces: { ui: this.ui, modal: this.modal, popup: this.popup },
+        surfaces: this.surfaces,
         intrinsics: options.intrinsics
       });
     }
@@ -123,18 +122,11 @@ export class Plugin {
       onDispose: options.onDispose,
       onMessage: options.onMessage,
       exposed: (bridge) => {
-        const base: Record<string, any> = {
-          console: createConsole(),
-          ui: this.ui.uiAPI,
-          modal: this.modal.modalAPI,
-          popup: this.popup.modalAPI
-        };
+        const base: Record<string, any> = { console: createConsole() };
         if (this.jsxHost) base.__zushi = this.jsxHost.bridge;
         const host =
           options.exposed?.({
-            ui: this.ui,
-            modal: this.modal,
-            popup: this.popup,
+            surfaces: this.surfaces,
             messages: bridge.messages,
             startEventLoop: bridge.startEventLoop
           }) ?? {};
@@ -155,9 +147,7 @@ export class Plugin {
 
   dispose(): void {
     this.sandbox.dispose();
-    this.ui.dispose();
-    this.modal.dispose();
-    this.popup.dispose();
+    for (const name of Object.keys(this.surfaces)) this.surfaces[name].dispose();
     for (const c of this.ownedContainers) c.remove();
     this.ownedContainers = [];
   }

@@ -29,11 +29,13 @@ describe("example plugin (regression)", () => {
     const event = vi.fn();
 
     plugin = new Plugin({
-      container,
       code: pluginSource,
       quickjs,
-      autoResize: "both",
-      exposed: () => ({ host: { increment, event } })
+      surfaces: { ui: { container, autoResize: "both" } },
+      exposed: ({ surfaces }) => ({
+        ui: surfaces.ui.api,
+        host: { increment, event }
+      })
     });
     await plugin.start();
 

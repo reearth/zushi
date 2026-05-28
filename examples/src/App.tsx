@@ -38,7 +38,8 @@ function ReactExample() {
   hostRef.current = host;
 
   const exposed = useCallback(
-    (_ctx: PluginContext) => ({
+    ({ surfaces }: PluginContext) => ({
+      ui: surfaces.ui.api,
       host: {
         increment: (n: number) => hostRef.current.increment(n),
         event: (name: string, value?: number) => hostRef.current.event(name, value)
@@ -73,11 +74,11 @@ function VanillaExample() {
     const container = containerRef.current;
     if (!container) return;
     const plugin = new Plugin({
-      container,
       code: pluginSource,
       quickjs,
-      autoResize: "both",
-      exposed: () => ({
+      surfaces: { ui: { container, autoResize: "both" } },
+      exposed: ({ surfaces }) => ({
+        ui: surfaces.ui.api,
         host: {
           increment: (n: number) => hostRef.current.increment(n),
           event: (name: string, value?: number) => hostRef.current.event(name, value)

@@ -39,9 +39,9 @@ describe("dispose does not leak QuickJS handles", () => {
       lastAbort = false;
       const f = vi.fn();
       const plugin = new Plugin({
-        container,
         quickjs: newQuickJSWASMModuleFromVariant(variant),
-        exposed: () => ({ host: { f } }),
+        surfaces: { ui: { container } },
+        exposed: ({ surfaces }) => ({ ui: surfaces.ui.api, host: { f } }),
         code: `ui.on("message", (m) => { if (m && m.type === "ready") host.f(); });
                ui.show(${JSON.stringify(readyHtml)});`
       });

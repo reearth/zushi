@@ -56,8 +56,8 @@ export type SNode =
       k?: string | number;
     };
 
-/** The UI surfaces a JSX root can target. */
-export type SurfaceId = "ui" | "modal" | "popup";
+/** The name of a UI surface a JSX root can target (host-defined). */
+export type SurfaceId = string;
 
 /**
  * How plugin-authored intrinsic (HTML) tags are gated:

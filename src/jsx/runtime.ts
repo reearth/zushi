@@ -36,7 +36,7 @@ export const h = createElement;
 export function render(
   element: unknown,
   options?: {
-    surface?: "ui" | "modal" | "popup";
+    surface?: string;
     visible?: boolean;
     width?: number | string;
     height?: number | string;

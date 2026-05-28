@@ -4,6 +4,5 @@ export {
   type UIEvents,
   type UIShowOptions,
   type UISurfaceOptions,
-  type UIAPI,
-  type ModalAPI
+  type SurfaceAPI
 } from "./uiSurface";

@@ -31,9 +31,8 @@ describe("jsx runtime (browser)", () => {
     const clicked = vi.fn();
 
     plugin = new Plugin({
-      container,
       jsx: true,
-      autoResize: "both",
+      surfaces: { ui: { container, autoResize: "both" } },
       quickjs,
       exposed: () => ({ host: { clicked } }),
       code: `
@@ -82,11 +81,10 @@ describe("jsx runtime (browser)", () => {
     const event = vi.fn();
 
     plugin = new Plugin({
-      container,
       jsx: true,
       intrinsics: false, // plugin may only use registered components
       components: jsxComponents,
-      autoResize: "both",
+      surfaces: { ui: { container, autoResize: "both" } },
       quickjs,
       exposed: () => ({ host: { event } }),
       code: jsxPluginSource

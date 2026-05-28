@@ -1,11 +1,19 @@
 import { useEffect, useRef } from "react";
 
-import { Plugin, type PluginOptions } from "../plugin";
+import { Plugin, type PluginOptions, type SurfaceConfig } from "../plugin";
+import type { AutoResize } from "../iframe";
 
-export type UsePluginOptions = Omit<
-  PluginOptions,
-  "container" | "modalContainer" | "popupContainer"
->;
+export type UsePluginOptions = Omit<PluginOptions, "surfaces"> & {
+  /** Name of the surface the mounted element hosts (default `"ui"`). */
+  surface?: string;
+  /** Auto-resize behavior for the mounted surface. */
+  autoResize?: AutoResize;
+  /**
+   * Additional surfaces to create (e.g. off-screen modals). Merged with the
+   * mounted surface; their `container` defaults to a hidden element.
+   */
+  surfaces?: Record<string, SurfaceConfig>;
+};
 
 export type UsePluginResult<T extends HTMLElement = HTMLDivElement> = {
   /** Attach this ref to the element the main UI should mount into. */
@@ -32,7 +40,16 @@ export function usePlugin<T extends HTMLElement = HTMLDivElement>(
     const container = containerRef.current;
     if (!container) return;
 
-    const plugin = new Plugin({ ...optionsRef.current, container });
+    const {
+      surface = "ui",
+      autoResize,
+      surfaces,
+      ...rest
+    } = optionsRef.current;
+    const plugin = new Plugin({
+      ...rest,
+      surfaces: { [surface]: { container, autoResize }, ...surfaces }
+    });
     pluginRef.current = plugin;
     plugin.start().catch((err) => optionsRef.current.onError?.(err));
 

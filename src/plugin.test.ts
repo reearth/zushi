@@ -14,20 +14,18 @@ describe("Plugin", () => {
     container.remove();
   });
 
-  test("exposes console/ui/modal/popup by default and renders UI", async () => {
+  test("hands declared surfaces to exposed and renders UI", async () => {
     const plugin = new Plugin({
-      container,
+      surfaces: { main: { container } },
       code: `
         reearth.ui.show("<div>hello plugin</div>");
         reearth.console.log("loaded");
       `,
-      exposed: ({ ui, modal, popup, messages, startEventLoop }) => ({
-        // host wires everything under a "reearth" global
+      exposed: ({ surfaces, messages, startEventLoop }) => ({
+        // host wires the surface under its own "reearth" global
         reearth: {
           console: { log: (...a: any[]) => console.log(...a) },
-          ui: ui.uiAPI,
-          modal: modal.modalAPI,
-          popup: popup.modalAPI,
+          ui: surfaces.main.api,
           messages,
           startEventLoop
         }
@@ -42,18 +40,18 @@ describe("Plugin", () => {
   });
 
   test("plugin receives messages posted from its UI iframe", async () => {
+    const received: any[] = [];
     const plugin = new Plugin({
-      container,
-      exposed: ({ ui }) => ({
+      surfaces: { ui: { container } },
+      exposed: ({ surfaces }) => ({
         out: { record: (m: any) => received.push(m) },
-        reearth: { ui: ui.uiAPI }
+        reearth: { ui: surfaces.ui.api }
       }),
       code: `
         reearth.ui.show("<div>x</div>");
         reearth.ui.on("message", (m) => out.record(m));
       `
     });
-    const received: any[] = [];
     await plugin.start();
 
     const iframe = container.querySelector("iframe")!;
@@ -76,13 +74,23 @@ describe("Plugin", () => {
     plugin.dispose();
   });
 
-  test("dispose removes auto-created modal/popup containers", async () => {
+  test("creates a hidden container for a surface without one, and removes it on dispose", async () => {
     const before = document.body.querySelectorAll("div").length;
-    const plugin = new Plugin({ container, code: `1;` });
+    const plugin = new Plugin({
+      surfaces: { ui: { container }, modal: {} }, // modal has no container
+      code: `1;`
+    });
     await plugin.start();
-    // two containers (modal + popup) were appended to body
-    expect(document.body.querySelectorAll("div").length).toBe(before + 2);
+    // one hidden container was appended to body for "modal"
+    expect(document.body.querySelectorAll("div").length).toBe(before + 1);
     plugin.dispose();
     expect(document.body.querySelectorAll("div").length).toBe(before);
+  });
+
+  test("creates no surfaces by default", async () => {
+    const plugin = new Plugin({ code: `1;` });
+    await plugin.start();
+    expect(Object.keys(plugin.surfaces)).toEqual([]);
+    plugin.dispose();
   });
 });

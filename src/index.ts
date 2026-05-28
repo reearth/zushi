@@ -9,7 +9,8 @@ export { merge } from "./utils/merge";
 export {
   Plugin,
   type PluginOptions,
-  type PluginContext
+  type PluginContext,
+  type SurfaceConfig
 } from "./plugin";
 export {
   type VNode,

@@ -28,6 +28,9 @@ function zushiVmRuntime() {
   const config: any = (bridge && bridge.config) || {};
   // intrinsics policy: true (any), false (none), or array of allowed tags.
   const intrinsics: any = config.intrinsics === undefined ? true : config.intrinsics;
+  // Known surface names (for validation) and the default render target.
+  const surfaceNames: any = Array.isArray(config.surfaces) ? config.surfaces : null;
+  const defaultSurface: string = config.defaultSurface || "ui";
 
   const trusted = new WeakSet();
   let trustDepth = 0;
@@ -244,7 +247,13 @@ function zushiVmRuntime() {
 
   function render(element: any, options: any) {
     const opts = options || {};
-    const id = opts.surface || "ui";
+    const id = opts.surface || defaultSurface;
+    if (surfaceNames && surfaceNames.indexOf(id) < 0) {
+      reportError(
+        new Error('zushi: render() to unknown surface "' + id + '"')
+      );
+      return;
+    }
     const root = getRoot(id);
     root.rootElement = element;
     root.options = {

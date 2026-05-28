@@ -37,17 +37,27 @@ npm install @reearth/zushi
 import { Plugin } from "@reearth/zushi";
 
 const plugin = new Plugin({
-  container: document.getElementById("plugin-ui")!,
+  // Declare the UI surfaces you want. None are created by default; each gets a
+  // sandboxed iframe. Omit `container` for off-screen surfaces (e.g. a modal).
+  surfaces: {
+    main: { container: document.getElementById("plugin-ui")! },
+    dialog: {}
+  },
   code: `
     // This runs inside the QuickJS VM. It has no DOM access.
     reearth.ui.show("<h1>Hello from a plugin</h1>");
     reearth.ui.on("message", (msg) => reearth.console.log("from iframe:", msg));
     host.greet("world");
   `,
-  // Build the API exposed to plugin code. The default globals
-  // (console, ui, modal, popup) are merged in automatically.
-  exposed: ({ ui, modal, popup, messages, startEventLoop }) => ({
-    reearth: { ui: ui.uiAPI, modal: modal.modalAPI, popup: popup.modalAPI },
+  // Build the API exposed to plugin code. Only `console` is provided by
+  // default; you wire surfaces up under whatever names you like.
+  exposed: ({ surfaces, messages, startEventLoop }) => ({
+    reearth: {
+      ui: surfaces.main.api,
+      modal: surfaces.dialog.api,
+      messages,
+      startEventLoop
+    },
     host: {
       greet: (name: string) => console.log(`plugin greeted ${name}`)
     }
@@ -71,10 +81,13 @@ import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten";
 
 const quickjs = newQuickJSWASMModuleFromVariant(variant);
 
-const plugin = new Plugin({ container, code, quickjs }); // pass it through
+const plugin = new Plugin({ surfaces, code, quickjs }); // pass it through
 ```
 
 ### React
+
+`PluginView` mounts one element and hosts a surface named `"ui"` in it (rename
+via the `surface` prop; declare extra off-screen surfaces via `surfaces`).
 
 ```tsx
 import { PluginView } from "@reearth/zushi/react";
@@ -84,7 +97,7 @@ function MyPlugin() {
     <PluginView
       code={pluginSource}
       style={{ width: 320, height: 240 }}
-      exposed={({ ui }) => ({ reearth: { ui: ui.uiAPI } })}
+      exposed={({ surfaces }) => ({ reearth: { ui: surfaces.ui.api } })}
     />
   );
 }
@@ -109,14 +122,14 @@ declaratively with a small React-like runtime that runs **inside the VM**. Pass
 
 ```ts
 const plugin = new Plugin({
-  container,
   jsx: true,
+  surfaces: { ui: { container } },
   code: `
     function Counter() {
       const [n, setN] = useState(0);
       return h("button", { onClick: () => setN(n + 1) }, "count: " + n);
     }
-    render(h(Counter));   // mounts into the main UI iframe
+    render(h(Counter));   // mounts into the "ui" surface by default
   `
 });
 ```
@@ -129,8 +142,9 @@ const plugin = new Plugin({
   to the host. Event handlers never leave the VM — they're referenced by id and
   invoked when the iframe reports a DOM event. A tiny patcher in the iframe
   diffs (keyed) and patches real DOM, so input focus/caret survive re-renders.
-- **Surfaces**: `render(el, { surface: "modal" })` (or `"popup"`) targets the
-  other iframes; each reconciles independently.
+- **Surfaces**: `render(el, { surface: "dialog" })` targets another declared
+  surface by name; each reconciles independently. Without `surface` it renders
+  into the surface named `"ui"` (or the only one declared).
 
 ### Writing JSX
 
@@ -162,6 +176,7 @@ component vocabulary:
 ```ts
 new Plugin({
   jsx: true,
+  surfaces: { ui: { container } },
   intrinsics: false, // plugins may not use raw HTML tags…
   components: `
     // …but trusted components, run in the VM before the plugin, may.
@@ -190,11 +205,11 @@ untrusted plugin code
 | ----------- | ------------------------------- | --------------------------------------------------------- |
 | `runtime/`  | `Sandbox`                       | QuickJS VM lifecycle, expose, eval, job loop, dispose     |
 | `iframe/`   | `SafeIFrame`                    | Sandboxed iframe, srcdoc injection, auto-resize, messages |
-| `ui/`       | `UISurface`, `createConsole`    | `ui`/`modal`/`popup` API built on `SafeIFrame`            |
+| `ui/`       | `UISurface`, `createConsole`    | Named UI surface API (`.api`) built on `SafeIFrame`       |
 | `events/`   | `events`, `mergeEvents`         | Typed event emitter (QuickJS-marshal-stable via fingerprint) |
 | `storage/`  | `ClientStorage`                 | Per-instance IndexedDB key-value store                    |
 | `jsx/`      | `VM_RUNTIME_SOURCE`, `JsxHost`  | Opt-in in-VM JSX runtime + iframe DOM patcher (`jsx: true`) |
-| top-level   | `Plugin`                        | Orchestrates the three UI surfaces + VM + default expose  |
+| top-level   | `Plugin`                        | Creates host-declared UI surfaces + VM + default expose   |
 | `/react`    | `usePlugin`, `PluginView`      | React adapter                                             |
 
 ## Security model

@@ -71,9 +71,12 @@ export class JsxHost {
   private dispatch: DispatchFn | undefined;
   private intrinsics: IntrinsicsPolicy;
 
+  private names: SurfaceId[];
+
   constructor(options: JsxHostOptions) {
     this.intrinsics = options.intrinsics ?? true;
-    for (const id of Object.keys(options.surfaces) as SurfaceId[]) {
+    this.names = Object.keys(options.surfaces);
+    for (const id of this.names) {
       const surface = options.surfaces[id];
       if (!surface) continue;
       this.controllers.set(
@@ -94,7 +97,11 @@ export class JsxHost {
   get bridge(): {
     render: (surfaceId: SurfaceId, payload: RenderPayload, options?: any) => void;
     ready: (dispatch: DispatchFn) => void;
-    config: { intrinsics: IntrinsicsPolicy };
+    config: {
+      intrinsics: IntrinsicsPolicy;
+      surfaces: SurfaceId[];
+      defaultSurface: SurfaceId | undefined;
+    };
   } {
     return {
       render: (surfaceId, payload, options) =>
@@ -102,7 +109,16 @@ export class JsxHost {
       ready: (dispatch) => {
         this.dispatch = dispatch;
       },
-      config: { intrinsics: this.intrinsics }
+      config: {
+        intrinsics: this.intrinsics,
+        surfaces: this.names,
+        // Prefer a surface named "ui"; otherwise fall back to the only one.
+        defaultSurface: this.names.includes("ui")
+          ? "ui"
+          : this.names.length === 1
+            ? this.names[0]
+            : undefined
+      }
     };
   }
 }
