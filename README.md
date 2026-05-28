@@ -7,6 +7,8 @@ host-defined API into it, and render plugin UI inside sandboxed `<iframe>`s.
 Extracted and generalized from the plugin mechanism of
 [Re:Earth Visualizer](https://github.com/reearth/reearth-visualizer).
 
+> The name comes from _zushi_ (厨子), a small Japanese cabinet that enshrines a precious object behind doors you open only when needed — much like a host that encloses an external module and opens it to render on demand.
+
 ## Why
 
 Running third-party plugin code safely in a web app needs two layers of
