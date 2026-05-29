@@ -73,6 +73,35 @@ describe("Sandbox", () => {
     expect(sandbox.loaded).toBe(false);
   });
 
+  test('default "json" snapshots values the default rule rejects', async () => {
+    class Foo {
+      x = 1;
+    }
+    const seen: any[] = [];
+    const sandbox = new Sandbox({
+      exposed: { host: { foo: new Foo(), report: (v: any) => seen.push(v) } },
+      code: `host.report(host.foo && host.foo.x);`
+    });
+    await sandbox.start();
+    expect(seen).toEqual([1]);
+    sandbox.dispose();
+  });
+
+  test("isMarshalable: false leaves those values unmarshaled", async () => {
+    class Foo {
+      x = 1;
+    }
+    const seen: any[] = [];
+    const sandbox = new Sandbox({
+      isMarshalable: false,
+      exposed: { host: { foo: new Foo(), report: (v: any) => seen.push(v) } },
+      code: `host.report(typeof host.foo);`
+    });
+    await sandbox.start();
+    expect(seen).toEqual(["undefined"]);
+    sandbox.dispose();
+  });
+
   test("defaultIsMarshalable rejects class instances", () => {
     class Foo {
       x = 1;

@@ -52,7 +52,12 @@ export type SandboxOptions = {
    * singlefile variant for bundlers/browsers.
    */
   quickjs?: QuickJSWASMModule | Promise<QuickJSWASMModule>;
-  /** Additional marshalability rule, OR'd with the default. */
+  /**
+   * Verdict for values the default rule rejects (class instances, …), OR'd with
+   * the default. A function is consulted per value; a static `true` (live
+   * proxy), `false` (not marshaled) or `"json"` (deep-copied snapshot) applies
+   * to all of them. Defaults to `"json"`.
+   */
   isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
   /** API object (or factory) injected as globals into the VM. */
   exposed?: Exposed;
@@ -138,10 +143,14 @@ export class Sandbox {
       return;
     }
 
+    // Values the default rule rejects (class instances, …) fall back to this:
+    // a custom function, an explicit static verdict, or a "json" snapshot.
+    const fallback =
+      typeof isMarshalable === "function"
+        ? isMarshalable
+        : () => (isMarshalable === undefined ? "json" : isMarshalable);
     this.arenaRef = new Arena(ctx, {
-      isMarshalable: (target) =>
-        defaultIsMarshalable(target) ||
-        (typeof isMarshalable === "function" ? isMarshalable(target) : "json"),
+      isMarshalable: (target) => defaultIsMarshalable(target) || fallback(target),
       experimentalContextEx: true
     });
 
