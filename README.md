@@ -1,8 +1,8 @@
 # zushi
 
 A framework-agnostic plugin runtime for the browser. Run untrusted plugin code
-in an isolated WASM **backend** — [QuickJS](https://github.com/justjake/quickjs-emscripten)
-for JavaScript by default, with room for other guest languages — expose a
+in an isolated WASM **backend** — a built-in [QuickJS](https://github.com/justjake/quickjs-emscripten)
+backend runs JavaScript, with room for other guest languages — expose a
 host-defined API into it, and render plugin UI inside sandboxed `<iframe>`s.
 
 > The name comes from _zushi_ (厨子), a small Japanese cabinet that enshrines a precious object behind doors you open only when needed — much like a host that encloses an external module and opens it to render on demand.
@@ -12,8 +12,8 @@ host-defined API into it, and render plugin UI inside sandboxed `<iframe>`s.
 Running third-party plugin code safely in a web app needs two layers of
 isolation:
 
-1. **A language VM** behind a pluggable `Backend`. The default is
-   [QuickJS](https://github.com/justjake/quickjs-emscripten) (via
+1. **A language VM** behind a pluggable `Backend` you choose explicitly. The
+   built-in one is [QuickJS](https://github.com/justjake/quickjs-emscripten) (via
    [`quickjs-emscripten-sync`](https://github.com/reearth/quickjs-emscripten-sync))
    for JavaScript, so plugin logic never touches the host realm — no `window`,
    no `document`, no `fetch`, unless the host explicitly hands it over. Other
@@ -268,7 +268,7 @@ subset, not full compatibility.
 
 ```
 untrusted plugin code
-  └─ Backend (QuickJS by default) (Sandbox)       — runtime/
+  └─ Backend (QuickJS built-in)  (Sandbox)       — runtime/
        └─ exposed host API      (merge)          — ui/ + your API
             └─ sandboxed iframe (SafeIFrame)     — iframe/
                  └─ postMessage  ←→  host

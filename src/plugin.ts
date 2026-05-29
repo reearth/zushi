@@ -98,8 +98,8 @@ export type PluginOptions = {
 
 /**
  * High-level orchestrator: creates the host-declared sandboxed UI surfaces,
- * wires them to the execution backend (QuickJS by default), and exposes a
- * default `{ console }` global merged
+ * wires them to the chosen execution backend (QuickJS is built in), and exposes
+ * a default `{ console }` global merged
  * with any host-provided API. Surfaces are handed to the host via the `exposed`
  * factory rather than auto-exposed.
  */

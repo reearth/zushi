@@ -4,10 +4,10 @@
  * scheduling, error handling) and drives a `Backend` for everything that
  * depends on the underlying VM.
  *
- * QuickJS (see {@link ./quickjs}) is the default backend. Other guest languages
- * — e.g. a Python WASM runtime — can implement this same interface; the only
- * backend-agnostic constraint is the {@link Backend.language} tag, which gates
- * language-specific host features (the JSX layer requires `"js"`).
+ * QuickJS (see {@link ./quickjs}) is the built-in backend. Other guest
+ * languages — e.g. a Python WASM runtime — can implement this same interface;
+ * the only backend-agnostic constraint is the {@link Backend.language} tag,
+ * which gates language-specific host features (the JSX layer requires `"js"`).
  */
 export interface Backend {
   /** Human-readable label for diagnostics (e.g. `"quickjs"`). */
