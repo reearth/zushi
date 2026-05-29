@@ -28,6 +28,13 @@ export const FRAGMENT = "__zushi.Fragment";
 export const BRIDGE_GLOBAL = "__zushi";
 
 /**
+ * The id of the mount element a renderer's patcher reconciles into. Part of the
+ * public patcher contract; custom renderers must host an element with this id.
+ * Must match the literal used in {@link ./patcher}.
+ */
+export const ROOT_ID = "__zushi_root";
+
+/**
  * The JSX runtime functions a host can place into plugin scope. `runtime` refs
  * (see {@link PluginOptions}) and the default `namespace` object both draw from
  * this set.

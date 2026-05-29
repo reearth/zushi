@@ -13,6 +13,20 @@ export {
   type SurfaceConfig
 } from "./plugin";
 export {
+  domRenderer,
+  reactRenderer,
+  hostReactRenderer,
+  isHostRenderer,
+  ROOT_ID,
+  MSG_RENDER,
+  MSG_EVENT,
+  type Renderer,
+  type HostRenderer,
+  type HostRendererInstance,
+  type HostRenderContext,
+  type AnyRenderer,
+  type ReactRendererOptions,
+  type HostReactRendererOptions,
   type VNode,
   type SNode,
   type SEvent,

@@ -3,6 +3,7 @@ import { PluginView } from "@reearth/zushi/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { jsxSetup, jsxPluginSource } from "./jsxPluginSource";
+import { konvaRenderer, konvaPluginSource } from "./konva";
 import { type ExampleHost, pluginSource } from "./pluginSource";
 import { quickjsModule } from "./quickjs";
 
@@ -137,6 +138,41 @@ function JsxExample() {
   );
 }
 
+// Pluggable renderer: the same JSX pipeline, but the iframe patcher draws to a
+// <canvas> via react-konva instead of HTML DOM. The plugin emits a
+// Stage/Layer/Rect intrinsic tree; the konva renderer commits it to canvas.
+function KonvaExample() {
+  const { log, host } = useHostLog();
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
+  const exposed = useCallback(
+    (_ctx: PluginContext) => ({
+      host: {
+        event: (name: string, value?: number) =>
+          hostRef.current.event(name, value)
+      }
+    }),
+    []
+  );
+
+  return (
+    <section className="card">
+      <h2>Canvas · react-konva renderer</h2>
+      <PluginView
+        jsx
+        renderer={konvaRenderer}
+        intrinsics={["Stage", "Layer", "Rect", "Circle", "Text", "Group"]}
+        code={konvaPluginSource}
+        backend={backend}
+        exposed={exposed}
+        className="frame"
+      />
+      <Log entries={log} />
+    </section>
+  );
+}
+
 export function App() {
   return (
     <main>
@@ -144,12 +180,14 @@ export function App() {
       <p>
         Click <strong>+1</strong> inside each sandboxed iframe. The click is sent
         to the plugin VM, which calls the host API and posts the new count back
-        into the iframe.
+        into the iframe. The last card swaps the renderer for a react-konva
+        canvas — same JSX pipeline, drawn to &lt;canvas&gt; instead of DOM.
       </p>
       <div className="grid">
         <ReactExample />
         <VanillaExample />
         <JsxExample />
+        <KonvaExample />
       </div>
     </main>
   );

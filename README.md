@@ -329,6 +329,72 @@ hooks and elements may then run inside the VM. Anything touching `react-dom`,
 real DOM refs, portals, or concurrent features will not work — treat this as a
 subset, not full compatibility.
 
+### Pluggable renderers (canvas, etc.)
+
+The JSX pipeline is renderer-agnostic: the in-VM runtime reconciles components
+and hooks into a serialized intrinsic tree, and a **renderer** turns that tree
+into something visible. The plugin keeps writing JSX; only the renderer changes.
+There are two kinds, differing in isolation:
+
+- **iframe `Renderer`** (default `domRenderer`) — draws in a sandboxed iframe.
+  Required for HTML, where untrusted markup must be isolated.
+- **host-direct `HostRenderer`** — draws straight in the host page, no iframe.
+  Use it only for targets that can't execute the data they're given — `<canvas>`
+  / WebGL (react-konva, react-three-fiber, react-pixi, …).
+
+**Why host-direct is safe for canvas.** Plugin code never leaves the VM; only a
+serialized data tree crosses to the host — never code or functions. So a
+host-direct renderer is safe as long as it never turns that data into execution:
+no `eval`/`new Function`, no `innerHTML`/`dangerouslySetInnerHTML`, no
+DOM-building components, no routing data into `href`/`src`/`fetch`. Canvas
+drawing primitives clear that bar; arbitrary HTML does not (use an iframe
+renderer for HTML).
+
+`hostReactRenderer` is the easy path for canvas: pass your app's React and a
+component map directly — no iframe, no CDN, no cross-origin loading, and one
+deduped konva instance, so react-konva's setup just works.
+
+```ts
+import { hostReactRenderer } from "@reearth/zushi";
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { Stage, Layer, Rect } from "react-konva";
+import "konva/lib/shapes/Rect"; // register the shapes you use
+
+const konva = hostReactRenderer({
+  React,
+  createRoot,
+  components: { Stage, Layer, Rect }
+});
+
+new Plugin({
+  backend: quickjs(),
+  jsx: true,
+  renderer: konva,
+  intrinsics: ["Stage", "Layer", "Rect"], // the renderer's tag vocabulary
+  surfaces: { ui: { container } },
+  code: `
+    const { useState, h, render } = zushi;
+    render(h("Stage", { width: 320, height: 220 },
+      h("Layer", null, h("Rect", { x: 20, y: 20, width: 80, height: 60, fill: "tomato" }))));
+  `
+});
+```
+
+The plugin emits intrinsic tags as strings (`"Stage"`, `"Rect"`); the renderer's
+component map decides what they mean, and `intrinsics` gates which are allowed.
+A full runnable example lives in `examples/` (the canvas card — see
+`examples/src/konva.ts`).
+
+For an **iframe** React renderer (when you do want isolation), `reactRenderer`
+builds a patcher that reads `__zushiReact` / `__zushiCreateRoot` /
+`__zushiComponents` globals you set from its `bootstrap` (bundle them in — a
+bundler dedupes konva; CDN builds fragment it and the shapes never register).
+To write any renderer from scratch, implement the **patcher contract**: render a
+serialized tree into `#__zushi_root` on each `{ __zushi: "render", g, tree }`
+message, and post `{ __zushi: "event", hid, type, g, payload }` back when a
+listener fires (`payload` is yours to define).
+
 ## Architecture
 
 ```
@@ -346,7 +412,7 @@ untrusted plugin code
 | `ui/`       | `UISurface`, `createConsole`    | Named UI surface API (`.api`) built on `SafeIFrame`       |
 | `events/`   | `events`, `mergeEvents`         | Typed event emitter (QuickJS-marshal-stable via fingerprint) |
 | `storage/`  | `ClientStorage`                 | Per-instance IndexedDB key-value store                    |
-| `jsx/`      | `VM_RUNTIME_SOURCE`, `JsxHost`  | Opt-in in-VM JSX runtime + iframe DOM patcher (`jsx: true`) |
+| `jsx/`      | `JsxHost`, `domRenderer`, `reactRenderer` | Opt-in in-VM JSX runtime + pluggable iframe patcher (`jsx: true`) |
 | top-level   | `Plugin`                        | Creates host-declared UI surfaces + VM + default expose   |
 | `/react`    | `usePlugin`, `PluginView`      | React adapter                                             |
 

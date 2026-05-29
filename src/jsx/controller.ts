@@ -1,5 +1,11 @@
 import type { UISurface } from "../ui/uiSurface";
-import { PATCHER_HTML } from "./patcher";
+import {
+  domRenderer,
+  isHostRenderer,
+  type AnyRenderer,
+  type HostRenderer,
+  type HostRendererInstance
+} from "./renderer";
 import {
   MSG_EVENT,
   MSG_RENDER,
@@ -27,10 +33,16 @@ type DispatchFn = (
 class JsxController {
   private surface: UISurface;
   private onEvent: (data: any) => void;
+  private patcherHtml: string;
   private mounted = false;
 
-  constructor(surface: UISurface, onEvent: (data: any) => void) {
+  constructor(
+    surface: UISurface,
+    patcherHtml: string,
+    onEvent: (data: any) => void
+  ) {
     this.surface = surface;
+    this.patcherHtml = patcherHtml;
     this.onEvent = onEvent;
   }
 
@@ -45,7 +57,7 @@ class JsxController {
 
   push(payload: RenderPayload, options?: any): void {
     if (!this.mounted) {
-      this.surface.show(PATCHER_HTML, options ?? {});
+      this.surface.show(this.patcherHtml, options ?? {});
       this.mounted = true;
     } else if (options && (options.width != null || options.height != null)) {
       this.surface.resize(options.width, options.height);
@@ -56,11 +68,68 @@ class JsxController {
       tree: payload.tree
     });
   }
+
+  dispose(): void {}
+}
+
+/**
+ * Host-side glue for a {@link HostRenderer}: mounts the renderer directly into
+ * the surface's container (no iframe) and hands it serialized trees in-realm.
+ * Same `push`/event shape as {@link JsxController} so {@link JsxHost} treats
+ * both uniformly.
+ */
+class HostController {
+  private container: HTMLElement;
+  private renderer: HostRenderer;
+  private onEvent: (data: any) => void;
+  private instance: HostRendererInstance | undefined;
+
+  constructor(
+    container: HTMLElement,
+    renderer: HostRenderer,
+    onEvent: (data: any) => void
+  ) {
+    this.container = container;
+    this.renderer = renderer;
+    this.onEvent = onEvent;
+  }
+
+  push(payload: RenderPayload, options?: any): void {
+    if (!this.instance) {
+      this.instance = this.renderer.mount(this.container, {
+        onEvent: (hid, type, p, g) =>
+          this.onEvent({ hid, type, payload: p, g })
+      });
+    } else if (
+      this.instance.resize &&
+      options &&
+      (options.width != null || options.height != null)
+    ) {
+      this.instance.resize(options.width, options.height);
+    }
+    this.instance.render(payload.tree, payload.g);
+  }
+
+  dispose(): void {
+    this.instance?.dispose();
+    this.instance = undefined;
+  }
 }
 
 export type JsxHostOptions = {
   surfaces: Partial<Record<SurfaceId, UISurface>>;
   intrinsics?: IntrinsicsPolicy;
+  /**
+   * The renderer each surface uses. An iframe {@link Renderer} (default DOM) or
+   * a host-direct {@link HostRenderer}.
+   */
+  renderer?: AnyRenderer;
+  /**
+   * Pumps the VM job loop. Iframe renderers pump via the surface's message
+   * channel; host-direct renderers deliver events in-realm, so the host must
+   * pump after dispatching one (so the resulting re-render runs).
+   */
+  startEventLoop?: () => void;
   /** Default placement for the runtime API (see {@link RuntimeNamespace}). */
   namespace?: RuntimeNamespace;
   /** Whether `registerComponent` is included in the default placement. */
@@ -73,11 +142,12 @@ export type JsxHostOptions = {
  * function, and routes incoming iframe events to it tagged with their surface.
  */
 export class JsxHost {
-  private controllers = new Map<SurfaceId, JsxController>();
+  private controllers = new Map<SurfaceId, JsxController | HostController>();
   private dispatch: DispatchFn | undefined;
   private intrinsics: IntrinsicsPolicy;
   private namespace: RuntimeNamespace;
   private exposeRegisterComponent: boolean;
+  private startEventLoop?: () => void;
   private placements: RuntimePlacement[] = [];
 
   private names: SurfaceId[];
@@ -86,22 +156,37 @@ export class JsxHost {
     this.intrinsics = options.intrinsics ?? true;
     this.namespace = options.namespace ?? "zushi";
     this.exposeRegisterComponent = options.exposeRegisterComponent ?? false;
+    this.startEventLoop = options.startEventLoop;
+    const renderer = options.renderer ?? domRenderer;
+    const host = isHostRenderer(renderer);
     this.names = Object.keys(options.surfaces);
     for (const id of this.names) {
       const surface = options.surfaces[id];
       if (!surface) continue;
+      const onEvent = (data: any) => {
+        this.dispatch?.(id, data.hid, data.type, data.payload, data.g);
+        // Iframe events get pumped by the surface's message handler; host-direct
+        // events arrive in-realm, so pump here to run the resulting re-render.
+        if (host) this.startEventLoop?.();
+      };
       this.controllers.set(
         id,
-        new JsxController(surface, (data) =>
-          this.dispatch?.(id, data.hid, data.type, data.payload, data.g)
-        )
+        isHostRenderer(renderer)
+          ? new HostController(surface.container, renderer, onEvent)
+          : new JsxController(surface, renderer.patcherHtml, onEvent)
       );
     }
   }
 
   /** Protocol interceptor for a surface; pass to `UISurface.onProtocolMessage`. */
   handle(id: SurfaceId, data: any): boolean {
-    return this.controllers.get(id)?.handleMessage(data) ?? false;
+    const c = this.controllers.get(id);
+    return c instanceof JsxController ? c.handleMessage(data) : false;
+  }
+
+  /** Tear down all controllers (host renderers unmount their roots). */
+  dispose(): void {
+    for (const c of this.controllers.values()) c.dispose();
   }
 
   /**

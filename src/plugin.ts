@@ -13,7 +13,8 @@ import {
   extractPlacements,
   type RuntimeRefs,
   type IntrinsicsPolicy,
-  type RuntimeNamespace
+  type RuntimeNamespace,
+  type AnyRenderer
 } from "./jsx";
 import { merge } from "./utils/merge";
 
@@ -115,6 +116,15 @@ export type PluginOptions = {
    * {@link jsx}.
    */
   intrinsics?: IntrinsicsPolicy;
+  /**
+   * The renderer each surface uses. Defaults to the built-in `domRenderer`
+   * (HTML DOM in a sandboxed iframe). Supply an iframe `Renderer` (e.g. from
+   * `reactRenderer`) or a host-direct `HostRenderer` (e.g. from
+   * `hostReactRenderer`, for canvas libraries — no iframe) to draw something
+   * other than DOM; set {@link intrinsics} to that renderer's tag vocabulary.
+   * Requires {@link jsx}.
+   */
+  renderer?: AnyRenderer;
   /** Builds the host-specific API merged into the exposed globals. */
   exposed?: (ctx: PluginContext) => Record<string, any>;
   /**
@@ -171,6 +181,8 @@ export class Plugin {
       this.jsxHost = new JsxHost({
         surfaces: this.surfaces,
         intrinsics: options.intrinsics,
+        renderer: options.renderer,
+        startEventLoop,
         namespace: options.namespace,
         exposeRegisterComponent: options.exposeRegisterComponent
       });
@@ -231,6 +243,7 @@ export class Plugin {
 
   dispose(): void {
     this.sandbox.dispose();
+    this.jsxHost?.dispose();
     for (const name of Object.keys(this.surfaces)) this.surfaces[name].dispose();
     for (const c of this.ownedContainers) c.remove();
     this.ownedContainers = [];

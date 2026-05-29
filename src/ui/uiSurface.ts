@@ -40,6 +40,11 @@ export type SurfaceAPI = Pick<
 export class UISurface {
   readonly frame: SafeIFrame;
   readonly events: Events<UIEvents>;
+  /**
+   * The element this surface mounts into. The sandboxed iframe is created
+   * lazily on {@link show}; a host-direct renderer mounts here instead.
+   */
+  readonly container: HTMLElement;
 
   private emit: EventEmitter<UIEvents>;
   private startEventLoop?: () => void;
@@ -49,6 +54,7 @@ export class UISurface {
 
   constructor(opts: UISurfaceOptions) {
     [this.events, this.emit] = events<UIEvents>();
+    this.container = opts.container;
     this.startEventLoop = opts.startEventLoop;
     this.onProtocolMessage = opts.onProtocolMessage;
     this.frame = new SafeIFrame({

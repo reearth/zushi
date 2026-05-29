@@ -210,6 +210,76 @@ describe("Plugin", () => {
     plugin.dispose();
   });
 
+  test("mounts a custom renderer's patcher into the surface iframe", async () => {
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      surfaces: { ui: { container } },
+      renderer: {
+        name: "test",
+        patcherHtml:
+          '<!doctype html><html><body><div id="__zushi_root"></div>' +
+          "<!--CUSTOM_RENDERER--></body></html>"
+      },
+      code: `
+        const { h, render } = zushi;
+        render(h("div", null, "hi"));
+      `
+    });
+    await plugin.start();
+    const iframe = container.querySelector("iframe");
+    expect(iframe!.srcdoc).toContain("CUSTOM_RENDERER");
+    plugin.dispose();
+  });
+
+  test("host renderer mounts into the container (no iframe) and round-trips events", async () => {
+    let tree: any = null;
+    let gen = 0;
+    let fire: ((hid: number, type: string, payload: any, g: number) => void) | null =
+      null;
+    const clicked: any[] = [];
+
+    const hostRenderer = {
+      name: "fake",
+      target: "host" as const,
+      mount(_container: HTMLElement, ctx: { onEvent: any }) {
+        fire = ctx.onEvent;
+        return {
+          render(t: any[], g: number) {
+            tree = t;
+            gen = g;
+          },
+          dispose() {}
+        };
+      }
+    };
+
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      renderer: hostRenderer,
+      surfaces: { ui: { container } },
+      exposed: () => ({ host: { clicked: () => clicked.push(1) } }),
+      code: `
+        const { h, render } = zushi;
+        render(h("rect", { onClick: () => host.clicked() }));
+      `
+    });
+    await plugin.start();
+
+    // No iframe was created — the host renderer drew straight into the container.
+    expect(container.querySelector("iframe")).toBeNull();
+    // It received the serialized tree with the click listener.
+    expect(tree?.[0]?.t).toBe("rect");
+    const hid = tree[0].ev[0].h;
+
+    // Firing that listener round-trips to the plugin's handler.
+    fire!(hid, "click", {}, gen);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(clicked).toEqual([1]);
+    plugin.dispose();
+  });
+
   test("creates no surfaces by default", async () => {
     const plugin = new Plugin({ backend: quickjs(), code: `1;` });
     await plugin.start();
