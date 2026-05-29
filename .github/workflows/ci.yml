@@ -35,11 +35,13 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Typecheck
-        run: pnpm typecheck
-
+      # Build before typecheck: tests self-import the package via its
+      # "@reearth/zushi" name, which only resolves once dist exists.
       - name: Build
         run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Test (node)
         run: pnpm test
