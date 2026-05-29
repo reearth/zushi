@@ -20,6 +20,7 @@ export default defineConfig({
         // them even though tests exercise them (in the VM / a real browser).
         "src/jsx/vmRuntime.ts",
         "src/jsx/patcher.ts",
+        "src/jsx/reactPatcherSource.ts",
         "src/jsx/runtime.ts",
         "src/jsx/react-compat.ts",
         "src/jsx/jsx-runtime.ts",

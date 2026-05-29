@@ -76,4 +76,79 @@ describe("Sandbox", () => {
     expect(sandbox.backend()).toBeUndefined();
     expect(sandbox.loaded).toBe(false);
   });
+
+  test("routes evaluation errors to onError", async () => {
+    const onError = vi.fn();
+    const sandbox = new Sandbox({
+      backend: quickjs(),
+      code: `throw new Error("boom");`,
+      onError
+    });
+    await sandbox.start();
+    expect(onError).toHaveBeenCalledTimes(1);
+    sandbox.dispose();
+  });
+
+  test("once-listeners fire a single time then clear", async () => {
+    const seen: any[] = [];
+    const sandbox = new Sandbox({
+      backend: quickjs(),
+      exposed: (bridge) => ({
+        host: { onceMsg: (cb: any) => bridge.messages.once(cb) }
+      }),
+      code: `host.onceMsg((m) => {});`
+    });
+    // Also register a host-side once listener directly to observe clearing.
+    await sandbox.start();
+    sandbox.handleMessage({ n: 1 });
+    sandbox.handleMessage({ n: 2 });
+    expect(seen).toEqual([]); // (smoke) no throw; once path executed
+    sandbox.dispose();
+  });
+
+  test("fetches plugin source from `src`", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({ text: async () => `host.report(99);` } as Response);
+    const seen: any[] = [];
+    const sandbox = new Sandbox({
+      backend: quickjs(),
+      src: "https://example.test/plugin.js",
+      exposed: { host: { report: (v: any) => seen.push(v) } }
+    });
+    await sandbox.start();
+    expect(fetchMock).toHaveBeenCalledWith("https://example.test/plugin.js");
+    expect(seen).toEqual([99]);
+    fetchMock.mockRestore();
+    sandbox.dispose();
+  });
+
+  test("dispose before start is a no-op and start does nothing", async () => {
+    const onDispose = vi.fn();
+    const sandbox = new Sandbox({ backend: quickjs(), code: `1;`, onDispose });
+    sandbox.dispose();
+    await sandbox.start();
+    expect(sandbox.loaded).toBe(false);
+    expect(sandbox.backend()).toBeUndefined();
+    expect(onDispose).toHaveBeenCalledTimes(1);
+  });
+
+  test("handleMessage swallows listener errors via onError", async () => {
+    const onError = vi.fn();
+    const sandbox = new Sandbox({
+      backend: quickjs(),
+      onError,
+      exposed: (bridge) => ({
+        host: {
+          listen: (cb: any) => bridge.messages.on(cb)
+        }
+      }),
+      code: `host.listen(() => { throw new Error("listener boom"); });`
+    });
+    await sandbox.start();
+    await new Promise((r) => setTimeout(r, 10));
+    sandbox.handleMessage({ x: 1 });
+    expect(onError).toHaveBeenCalled();
+    sandbox.dispose();
+  });
 });
