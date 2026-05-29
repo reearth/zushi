@@ -1,7 +1,10 @@
+// Provides a real IndexedDB under jsdom for the end-to-end persistence test.
+import "fake-indexeddb/auto";
+
 import { describe, expect, test, vi } from "vitest";
 
 import { SyncedStore } from "./syncedStore";
-import type { ClientStorage } from "../storage";
+import { ClientStorage } from "../storage";
 
 describe("SyncedStore", () => {
   test("get/set/has/keys/delete and seeded initial values", () => {
@@ -62,5 +65,49 @@ describe("SyncedStore", () => {
     store.delete("x");
     await Promise.resolve();
     expect(backing.has("x")).toBe(false);
+  });
+
+  test("end-to-end: persists to real IndexedDB and hydrates a fresh store", async () => {
+    const storage = new ClientStorage();
+    const id = "sync-e2e";
+
+    // SyncedStore writes through fire-and-forget; capture the actual promises so
+    // we can await them deterministically (no timing races).
+    const writes: Promise<unknown>[] = [];
+    const origSet = storage.setAsync;
+    storage.setAsync = (i, k, v) => {
+      const p = origSet(i, k, v);
+      writes.push(p);
+      return p;
+    };
+    const origDelete = storage.deleteAsync;
+    storage.deleteAsync = (i, k) => {
+      const p = origDelete(i, k);
+      writes.push(p);
+      return p;
+    };
+
+    const a = new SyncedStore({ persist: true, storage, instanceId: id });
+    a.set("count", 7);
+    a.set("name", "yui");
+    await Promise.all(writes);
+    expect(await storage.getAsync(id, "count")).toBe(7);
+
+    // A fresh store (simulating a reload) hydrates the persisted values.
+    const b = new SyncedStore({ persist: true, storage, instanceId: id });
+    await b.hydrate();
+    expect(b.get("count")).toBe(7);
+    expect(b.get("name")).toBe("yui");
+
+    // Deletes persist too.
+    a.delete("name");
+    await Promise.all(writes);
+    expect(await storage.getAsync(id, "name")).toBeNull();
+    const c = new SyncedStore({ persist: true, storage, instanceId: id });
+    await c.hydrate();
+    expect(c.has("name")).toBe(false);
+    expect(c.get("count")).toBe(7);
+
+    await storage.dropStore(id);
   });
 });
