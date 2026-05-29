@@ -3,10 +3,11 @@
  *
  *   import { render, useState, createElement, Fragment } from "@reearth/zushi/jsx";
  *
- * Every export simply delegates to the globals installed by the in-VM runtime
- * (see ./vmRuntime), so the bundled code links up at VM execution time. For
- * plugins evaluated as a raw source string, the same names are available as
- * bare globals and this import is optional.
+ * Every export delegates to the runtime bundle the in-VM runtime installs at the
+ * placement-independent global `__zushi_api` (see ./vmRuntime), so bundled code
+ * links up at VM execution time regardless of where the host placed the API for
+ * raw-source plugins (the `namespace` option / `runtime` refs). `registerComponent`
+ * is part of the bundle only when the host opts in (`exposeRegisterComponent`).
  */
 type Props = Record<string, any> & { key?: unknown; children?: unknown };
 type Component = (props: any) => unknown;
@@ -19,6 +20,9 @@ export type VNode = {
 
 const g = globalThis as any;
 
+/** The placement-independent runtime bundle installed by the in-VM runtime. */
+const api = (): any => g.__zushi_api || {};
+
 /** Fragment sentinel; must match FRAGMENT in ./protocol.ts. */
 export const Fragment = "__zushi.Fragment";
 
@@ -27,7 +31,7 @@ export function createElement(
   props?: Props | null,
   ...children: unknown[]
 ): VNode {
-  return g.createElement(type, props, ...children);
+  return api().createElement(type, props, ...children);
 }
 
 export const h = createElement;
@@ -42,22 +46,22 @@ export function render(
     height?: number | string;
   }
 ): void {
-  g.render(element, options);
+  api().render(element, options);
 }
 
 /**
  * Register a trusted custom component, also made available as a global of the
  * same name. Typically called from the host's trusted `setup` source, not
- * from plugin code.
+ * from plugin code (it is absent from the bundle unless the host opts in).
  */
 export function registerComponent(name: string, fn: Component): void {
-  g.registerComponent(name, fn);
+  api().registerComponent(name, fn);
 }
 
 export function useState<S>(
   initial: S | (() => S)
 ): [S, (next: S | ((prev: S) => S)) => void] {
-  return g.useState(initial);
+  return api().useState(initial);
 }
 
 export function useReducer<S, A>(
@@ -65,11 +69,11 @@ export function useReducer<S, A>(
   initialArg: S,
   init?: (arg: S) => S
 ): [S, (action: A) => void] {
-  return g.useReducer(reducer, initialArg, init);
+  return api().useReducer(reducer, initialArg, init);
 }
 
 export function useEffect(effect: () => void | (() => void), deps?: unknown[]): void {
-  g.useEffect(effect, deps);
+  api().useEffect(effect, deps);
 }
 
 /** Alias for {@link useEffect}; there is no separate layout phase in the VM. */
@@ -77,24 +81,24 @@ export function useLayoutEffect(
   effect: () => void | (() => void),
   deps?: unknown[]
 ): void {
-  g.useLayoutEffect(effect, deps);
+  api().useLayoutEffect(effect, deps);
 }
 
 export function useMemo<T>(factory: () => T, deps?: unknown[]): T {
-  return g.useMemo(factory, deps);
+  return api().useMemo(factory, deps);
 }
 
 export function useCallback<T extends (...args: any[]) => any>(cb: T, deps?: unknown[]): T {
-  return g.useCallback(cb, deps);
+  return api().useCallback(cb, deps);
 }
 
 export function useRef<T>(initial: T): { current: T } {
-  return g.useRef(initial);
+  return api().useRef(initial);
 }
 
 /** Returns a stable id for the calling component, e.g. for form/aria wiring. */
 export function useId(): string {
-  return g.useId();
+  return api().useId();
 }
 
 export type Context<T> = {
@@ -102,11 +106,11 @@ export type Context<T> = {
 };
 
 export function createContext<T>(defaultValue: T): Context<T> {
-  return g.createContext(defaultValue);
+  return api().createContext(defaultValue);
 }
 
 export function useContext<T>(context: Context<T>): T {
-  return g.useContext(context);
+  return api().useContext(context);
 }
 
 /** Memoize a component: re-uses its last render when props are shallow-equal. */
@@ -114,18 +118,20 @@ export function memo<P>(
   component: (props: P) => unknown,
   areEqual?: (prev: P, next: P) => boolean
 ): (props: P) => unknown {
-  return g.memo(component, areEqual);
+  return api().memo(component, areEqual);
 }
 
 /**
  * Catches errors thrown while rendering its children and shows `fallback`
- * (a node or `(error) => node`) instead.
+ * (a node or `(error) => node`) instead. Used by identity as a component type,
+ * so this is the real marked runtime function (captured at module load, which
+ * for bundled plugins runs after the runtime is installed).
  */
 export const ErrorBoundary: (props: {
   fallback: unknown | ((error: unknown) => unknown);
   onError?: (error: unknown) => void;
   children?: unknown;
-}) => unknown = (g as any).ErrorBoundary;
+}) => unknown = api().ErrorBoundary;
 
 /**
  * Shows `fallback` while a child throws a thenable, then re-renders when it
@@ -134,4 +140,4 @@ export const ErrorBoundary: (props: {
 export const Suspense: (props: {
   fallback: unknown;
   children?: unknown;
-}) => unknown = (g as any).Suspense;
+}) => unknown = api().Suspense;

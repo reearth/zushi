@@ -19,7 +19,15 @@ type Dispatch = (
 
 function harness(
   code: string,
-  opts: { setup?: string; intrinsics?: any; exposed?: Record<string, any> } = {}
+  opts: {
+    setup?: string;
+    intrinsics?: any;
+    exposed?: Record<string, any>;
+    // Placement config; defaults to bare globals so test code uses bare names.
+    namespace?: any;
+    placements?: any[];
+    exposeRegisterComponent?: boolean;
+  } = {}
 ) {
   const renders: (RenderPayload & { surface: string })[] = [];
   const errors: any[] = [];
@@ -33,7 +41,12 @@ function harness(
       ...opts.exposed,
       console: { error: (...a: any[]) => errors.push(a) },
       __zushi: {
-        config: { intrinsics: opts.intrinsics ?? true },
+        config: {
+          intrinsics: opts.intrinsics ?? true,
+          namespace: opts.namespace ?? false,
+          placements: opts.placements ?? [],
+          exposeRegisterComponent: opts.exposeRegisterComponent ?? true
+        },
         render: (surface: string, payload: RenderPayload) =>
           renders.push({ ...payload, surface }),
         ready: (fn: Dispatch) => {

@@ -34,6 +34,10 @@ export const jsxSetup = `
 // Plugin code: a counter, a controlled input, and a keyed list — built only
 // from the registered components above (no raw HTML).
 export const jsxPluginSource = `
+  // The JSX runtime API lands in the default \`zushi\` namespace; pull the bits
+  // we use into locals. (Registered components like View/Text stay bare.)
+  const { useState, h, render } = zushi;
+
   function App() {
     const [count, setCount] = useState(0);
     const [text, setText] = useState("");

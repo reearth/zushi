@@ -6,7 +6,15 @@ import {
 } from "./runtime";
 import { createConsole, UISurface } from "./ui";
 import type { AutoResize } from "./iframe";
-import { JsxHost, VM_RUNTIME_SOURCE, type IntrinsicsPolicy } from "./jsx";
+import {
+  JsxHost,
+  VM_RUNTIME_SOURCE,
+  makeRuntimeRefs,
+  extractPlacements,
+  type RuntimeRefs,
+  type IntrinsicsPolicy,
+  type RuntimeNamespace
+} from "./jsx";
 import { merge } from "./utils/merge";
 
 /** Configuration for a single named UI surface. */
@@ -31,6 +39,15 @@ export type SurfaceConfig = {
 export type PluginContext = SandboxBridge & {
   /** The surfaces declared via {@link PluginOptions.surfaces}, keyed by name. */
   surfaces: Record<string, UISurface>;
+  /**
+   * Placement tokens for the JSX runtime API (requires {@link PluginOptions.jsx}).
+   * Drop any of these into the returned tree to plant that runtime function at
+   * that path in plugin scope, e.g. `reearth: { useState: runtime.useState }`
+   * exposes `reearth.useState`. Tokens never reach the VM — zushi resolves them
+   * to the real in-VM functions. Placing any token overrides the default
+   * {@link PluginOptions.namespace} placement.
+   */
+  runtime: RuntimeRefs;
 };
 
 export type PluginOptions = {
@@ -58,21 +75,39 @@ export type PluginOptions = {
    * (à la Figma's `View`/`Text`) become trusted, so the markup they emit may use
    * intrinsic tags even when {@link intrinsics} forbids them in plugin code.
    *
-   * The full JSX runtime is in scope (same globals plugin code sees):
-   * `registerComponent`, `h`/`createElement`, `Fragment`, `render`, the hooks
-   * (`useState`, `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`,
-   * `useCallback`, `useRef`, `useId`, `createContext`, `useContext`), plus
-   * `memo`, `ErrorBoundary` and `Suspense`. Requires {@link jsx}.
+   * The full JSX runtime is in scope here as bare names — `registerComponent`,
+   * `h`/`createElement`, `Fragment`, `render`, the hooks (`useState`,
+   * `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`, `useCallback`,
+   * `useRef`, `useId`, `createContext`, `useContext`), plus `memo`,
+   * `ErrorBoundary` and `Suspense` — regardless of where {@link namespace}
+   * placed them for plugin code. (It is run inside `with (__zushi.runtime)`.)
+   * The bundle is also reachable as `__zushi.runtime` for explicit wiring.
+   * Requires {@link jsx}.
    */
   setup?: string;
   /**
-   * Whether `registerComponent` stays reachable from plugin code. Off by
-   * default: the global is removed once {@link setup} has run, so only the
-   * trusted setup slot can register components (and thereby grant the
-   * intrinsic-tag privilege). Set `true` to keep it exposed to plugin code.
-   * Requires {@link jsx}.
+   * Where the JSX runtime API is planted for plugin code when the host does not
+   * place it explicitly via `runtime` refs (see {@link PluginContext.runtime}):
+   * a namespace object name (default `"zushi"` → `zushi.useState`, …) or
+   * `false` for bare globals. Ignored once any `runtime` ref is placed. Requires
+   * {@link jsx}.
+   */
+  namespace?: RuntimeNamespace;
+  /**
+   * Whether `registerComponent` is included in the default {@link namespace}
+   * placement. Off by default: only the trusted {@link setup} slot reaches it
+   * (via the runtime bundle), so plugin code cannot register components (and
+   * thereby grant itself the intrinsic-tag privilege). Requires {@link jsx}.
    */
   exposeRegisterComponent?: boolean;
+  /**
+   * Whether the host bridge `__zushi` stays reachable from plugin code. Off by
+   * default: it is deleted from the VM global scope after {@link setup} runs, so
+   * plugin code cannot reach the host render/dispatch internals. The runtime
+   * functions keep working (they capture the bridge in a closure). Requires
+   * {@link jsx}.
+   */
+  exposeBridge?: boolean;
   /**
    * Gates plugin-authored intrinsic (HTML) tags: `true` (default, any), `false`
    * (none — plugins must use registered components), or an allowlist of tags.
@@ -135,17 +170,26 @@ export class Plugin {
     if (options.jsx) {
       this.jsxHost = new JsxHost({
         surfaces: this.surfaces,
-        intrinsics: options.intrinsics
+        intrinsics: options.intrinsics,
+        namespace: options.namespace,
+        exposeRegisterComponent: options.exposeRegisterComponent
       });
     }
 
+    // When JSX is on, the runtime bundle lands on `__zushi.runtime`. `setup`
+    // runs with it in scope (bare names); afterwards the bridge is sealed off
+    // from plugin code unless `exposeBridge` is set.
     const bootstrap = options.jsx
       ? VM_RUNTIME_SOURCE +
-        (options.setup ? "\n;" + options.setup : "") +
-        (options.exposeRegisterComponent
-          ? ""
-          : "\n;delete globalThis.registerComponent;")
+        (options.setup
+          ? "\n;with(globalThis.__zushi.runtime){\n" + options.setup + "\n}"
+          : "") +
+        (options.exposeBridge ? "" : "\n;delete globalThis.__zushi;")
       : undefined;
+
+    // One ref token per runtime API; handed to `exposed` so the host can place
+    // them anywhere in its tree.
+    const runtime = makeRuntimeRefs();
 
     this.sandbox = new Sandbox({
       code: options.code,
@@ -157,14 +201,19 @@ export class Plugin {
       onDispose: options.onDispose,
       onMessage: options.onMessage,
       exposed: (bridge) => {
-        const base: Record<string, any> = { console: createConsole() };
-        if (this.jsxHost) base.__zushi = this.jsxHost.bridge;
         const host =
           options.exposed?.({
             surfaces: this.surfaces,
             messages: bridge.messages,
-            startEventLoop: bridge.startEventLoop
+            startEventLoop: bridge.startEventLoop,
+            runtime
           }) ?? {};
+        // Pull any placed runtime refs out of the host tree (they must not be
+        // marshaled) and tell the VM runtime where to install them — before the
+        // `__zushi` bridge snapshots its config below.
+        this.jsxHost?.setPlacements(extractPlacements(host));
+        const base: Record<string, any> = { console: createConsole() };
+        if (this.jsxHost) base.__zushi = this.jsxHost.bridge;
         return merge(base, host);
       }
     });

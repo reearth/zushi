@@ -11,22 +11,25 @@
  */
 const g = globalThis as any;
 
-export const createElement = (...args: any[]) => g.createElement(...args);
+/** The placement-independent runtime bundle installed by the in-VM runtime. */
+const api = (): any => g.__zushi_api || {};
+
+export const createElement = (...args: any[]) => api().createElement(...args);
 export const Fragment = "__zushi.Fragment";
 
-export const useState = (initial: any) => g.useState(initial);
-export const useReducer = (r: any, i: any, init?: any) => g.useReducer(r, i, init);
-export const useEffect = (fn: any, deps?: any) => g.useEffect(fn, deps);
-export const useLayoutEffect = (fn: any, deps?: any) => g.useLayoutEffect(fn, deps);
-export const useMemo = (fn: any, deps?: any) => g.useMemo(fn, deps);
-export const useCallback = (fn: any, deps?: any) => g.useCallback(fn, deps);
-export const useRef = (initial: any) => g.useRef(initial);
-export const useId = () => g.useId();
-export const createContext = (dflt: any) => g.createContext(dflt);
-export const useContext = (ctx: any) => g.useContext(ctx);
-export const memo = (fn: any, areEqual?: any) => g.memo(fn, areEqual);
+export const useState = (initial: any) => api().useState(initial);
+export const useReducer = (r: any, i: any, init?: any) => api().useReducer(r, i, init);
+export const useEffect = (fn: any, deps?: any) => api().useEffect(fn, deps);
+export const useLayoutEffect = (fn: any, deps?: any) => api().useLayoutEffect(fn, deps);
+export const useMemo = (fn: any, deps?: any) => api().useMemo(fn, deps);
+export const useCallback = (fn: any, deps?: any) => api().useCallback(fn, deps);
+export const useRef = (initial: any) => api().useRef(initial);
+export const useId = () => api().useId();
+export const createContext = (dflt: any) => api().createContext(dflt);
+export const useContext = (ctx: any) => api().useContext(ctx);
+export const memo = (fn: any, areEqual?: any) => api().memo(fn, areEqual);
 
-export const Suspense = (props: any) => g.Suspense(props);
+export const Suspense = (props: any) => api().Suspense(props);
 
 const toArray = (c: any): any[] => (c == null ? [] : Array.isArray(c) ? c : [c]);
 

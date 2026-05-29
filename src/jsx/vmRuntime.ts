@@ -605,31 +605,90 @@ function zushiVmRuntime() {
     }
   }
 
-  // ---- install globals + hand the host our dispatch fn ------------------
+  // ---- assemble the runtime bundle + plant it per host policy -----------
 
-  g.createElement = createElement;
-  g.h = createElement;
-  g.Fragment = FRAGMENT;
-  g.jsx = jsx;
-  g.jsxs = jsx;
-  g.jsxDEV = jsx;
+  // The full public API. Keys must match RUNTIME_API_NAMES in ./protocol.ts.
+  const runtime: any = {
+    createElement: createElement,
+    h: createElement,
+    Fragment: FRAGMENT,
+    jsx: jsx,
+    jsxs: jsx,
+    jsxDEV: jsx,
+    registerComponent: registerComponent,
+    useState: useState,
+    useReducer: useReducer,
+    useEffect: useEffect,
+    useLayoutEffect: useEffect, // no separate layout phase; same semantics
+    useMemo: useMemo,
+    useCallback: useCallback,
+    useRef: useRef,
+    useId: useId,
+    createContext: createContext,
+    useContext: useContext,
+    memo: memo,
+    ErrorBoundary: ErrorBoundary,
+    Suspense: Suspense,
+    render: render
+  };
+
+  // Internal wiring for the automatic JSX runtime (jsxImportSource). Always
+  // present and independent of where the public API lands, so JSX keeps
+  // transpiling even when `__zushi` is later deleted.
   g.__zushi_jsx = jsx;
   g.__zushi_createElement = createElement;
-  g.registerComponent = registerComponent;
-  g.useState = useState;
-  g.useReducer = useReducer;
-  g.useEffect = useEffect;
-  g.useLayoutEffect = useEffect; // no separate layout phase; same semantics
-  g.useMemo = useMemo;
-  g.useCallback = useCallback;
-  g.useRef = useRef;
-  g.useId = useId;
-  g.createContext = createContext;
-  g.useContext = useContext;
-  g.memo = memo;
-  g.ErrorBoundary = ErrorBoundary;
-  g.Suspense = Suspense;
-  g.render = render;
+
+  // Hand the *full* bundle to the trusted `setup` slot (reached via
+  // `__zushi.runtime`); it keeps `registerComponent` regardless of policy.
+  if (bridge) bridge.runtime = runtime;
+
+  const exposeReg = !!config.exposeRegisterComponent;
+
+  // The sealed bundle for plugin code: `registerComponent` is dropped unless
+  // explicitly opted in (so plugin code cannot grant itself the intrinsic-tag
+  // privilege). Backs both the default placement and the explicit-import shim.
+  const sealed: any = {};
+  const apiNames = Object.keys(runtime);
+  for (let i = 0; i < apiNames.length; i++) {
+    const k = apiNames[i];
+    if (k === "registerComponent" && !exposeReg) continue;
+    sealed[k] = runtime[k];
+  }
+
+  // Permanent, placement-independent handle for the explicit-import shim
+  // (`@reearth/zushi/jsx`). Survives the `__zushi` deletion.
+  g.__zushi_api = sealed;
+
+  // Where does the public API land in plugin scope?
+  const placements: any[] = Array.isArray(config.placements)
+    ? config.placements
+    : [];
+  if (placements.length) {
+    // Host placed runtime refs explicitly via `exposed` — honor exactly those.
+    // These draw from the *full* runtime: placing `registerComponent` by ref is
+    // a deliberate, trusted host decision.
+    for (let i = 0; i < placements.length; i++) {
+      const path: string[] = placements[i].path;
+      const fn = runtime[placements[i].name];
+      let target = g;
+      for (let j = 0; j < path.length - 1; j++) {
+        if (target[path[j]] == null || typeof target[path[j]] !== "object")
+          target[path[j]] = {};
+        target = target[path[j]];
+      }
+      target[path[path.length - 1]] = fn;
+    }
+  } else {
+    // Default placement: a namespace object, or bare globals when `false`.
+    const ns = config.namespace === undefined ? "zushi" : config.namespace;
+    if (ns === false) {
+      for (let i = 0; i < apiNames.length; i++) {
+        if (sealed[apiNames[i]] !== undefined) g[apiNames[i]] = sealed[apiNames[i]];
+      }
+    } else {
+      g[ns] = sealed;
+    }
+  }
 
   if (bridge && typeof bridge.ready === "function") bridge.ready(dispatch);
 }

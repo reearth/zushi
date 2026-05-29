@@ -38,6 +38,7 @@ describe("jsx runtime (browser)", () => {
       backend,
       exposed: () => ({ host: { clicked } }),
       code: `
+        const { useState, createElement, render } = zushi;
         function App() {
           const [n, setN] = useState(0);
           return createElement(

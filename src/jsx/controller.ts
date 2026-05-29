@@ -5,6 +5,8 @@ import {
   MSG_RENDER,
   type IntrinsicsPolicy,
   type RenderPayload,
+  type RuntimeNamespace,
+  type RuntimePlacement,
   type SurfaceId
 } from "./protocol";
 
@@ -59,6 +61,10 @@ class JsxController {
 export type JsxHostOptions = {
   surfaces: Partial<Record<SurfaceId, UISurface>>;
   intrinsics?: IntrinsicsPolicy;
+  /** Default placement for the runtime API (see {@link RuntimeNamespace}). */
+  namespace?: RuntimeNamespace;
+  /** Whether `registerComponent` is included in the default placement. */
+  exposeRegisterComponent?: boolean;
 };
 
 /**
@@ -70,11 +76,16 @@ export class JsxHost {
   private controllers = new Map<SurfaceId, JsxController>();
   private dispatch: DispatchFn | undefined;
   private intrinsics: IntrinsicsPolicy;
+  private namespace: RuntimeNamespace;
+  private exposeRegisterComponent: boolean;
+  private placements: RuntimePlacement[] = [];
 
   private names: SurfaceId[];
 
   constructor(options: JsxHostOptions) {
     this.intrinsics = options.intrinsics ?? true;
+    this.namespace = options.namespace ?? "zushi";
+    this.exposeRegisterComponent = options.exposeRegisterComponent ?? false;
     this.names = Object.keys(options.surfaces);
     for (const id of this.names) {
       const surface = options.surfaces[id];
@@ -93,6 +104,15 @@ export class JsxHost {
     return this.controllers.get(id)?.handleMessage(data) ?? false;
   }
 
+  /**
+   * Record where the host placed runtime refs (extracted from its `exposed`
+   * tree). Must be called before the VM evaluates the bootstrap, since the
+   * runtime reads these via {@link bridge}'s config.
+   */
+  setPlacements(placements: RuntimePlacement[]): void {
+    this.placements = placements;
+  }
+
   /** The object exposed into the VM as `__zushi`. */
   get bridge(): {
     render: (surfaceId: SurfaceId, payload: RenderPayload, options?: any) => void;
@@ -101,6 +121,9 @@ export class JsxHost {
       intrinsics: IntrinsicsPolicy;
       surfaces: SurfaceId[];
       defaultSurface: SurfaceId | undefined;
+      placements: RuntimePlacement[];
+      namespace: RuntimeNamespace;
+      exposeRegisterComponent: boolean;
     };
   } {
     return {
@@ -117,7 +140,10 @@ export class JsxHost {
           ? "ui"
           : this.names.length === 1
             ? this.names[0]
-            : undefined
+            : undefined,
+        placements: this.placements,
+        namespace: this.namespace,
+        exposeRegisterComponent: this.exposeRegisterComponent
       }
     };
   }

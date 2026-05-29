@@ -27,6 +27,58 @@ export const FRAGMENT = "__zushi.Fragment";
 /** Name of the host bridge object exposed into the VM when JSX is enabled. */
 export const BRIDGE_GLOBAL = "__zushi";
 
+/**
+ * The JSX runtime functions a host can place into plugin scope. `runtime` refs
+ * (see {@link PluginOptions}) and the default `namespace` object both draw from
+ * this set.
+ *
+ * `registerComponent` is intentionally listed but sealed from plugin code by
+ * default (only the trusted `setup` slot reaches it via the runtime bundle).
+ *
+ * Must match the keys the in-VM runtime installs into its bundle
+ * (see {@link ./vmRuntime}).
+ */
+export const RUNTIME_API_NAMES = [
+  "createElement",
+  "h",
+  "Fragment",
+  "jsx",
+  "jsxs",
+  "jsxDEV",
+  "registerComponent",
+  "useState",
+  "useReducer",
+  "useEffect",
+  "useLayoutEffect",
+  "useMemo",
+  "useCallback",
+  "useRef",
+  "useId",
+  "createContext",
+  "useContext",
+  "memo",
+  "ErrorBoundary",
+  "Suspense",
+  "render"
+] as const;
+
+export type RuntimeApiName = (typeof RUNTIME_API_NAMES)[number];
+
+/**
+ * Instruction telling the in-VM runtime to install runtime function `name` at
+ * the global path `path` (e.g. `["reearth", "useState"]` → `reearth.useState`).
+ * Produced by the host from `runtime` refs placed in the `exposed` tree.
+ */
+export type RuntimePlacement = { path: string[]; name: RuntimeApiName };
+
+/**
+ * Where the in-VM runtime plants its API when the host does not place it
+ * explicitly via `runtime` refs:
+ *  - a string — a single namespace object, e.g. `"zushi"` → `globalThis.zushi.*`;
+ *  - `false`  — bare globals on `globalThis` (one per API name).
+ */
+export type RuntimeNamespace = string | false;
+
 /** Message tag: host/iframe → render a serialized tree. */
 export const MSG_RENDER = "render";
 /** Message tag: iframe → host, a DOM event fired on a tagged element. */

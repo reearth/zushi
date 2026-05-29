@@ -155,12 +155,16 @@ Instead of pushing HTML strings with `ui.show(...)`, plugins can build UI
 declaratively with a small React-like runtime that runs **inside the VM**. Pass
 `jsx: true` to enable it; it's off by default and doesn't affect `ui.show`.
 
+By default the runtime API lands in a `zushi` namespace object in plugin scope
+(see [Where the runtime API lands](#where-the-runtime-api-lands) to change this):
+
 ```ts
 const plugin = new Plugin({
   backend: quickjs(),
   jsx: true,
   surfaces: { ui: { container } },
   code: `
+    const { useState, h, render } = zushi;
     function Counter() {
       const [n, setN] = useState(0);
       return h("button", { onClick: () => setN(n + 1) }, "count: " + n);
@@ -186,26 +190,78 @@ const plugin = new Plugin({
   surface by name; each reconciles independently. Without `surface` it renders
   into the surface named `"ui"` (or the only one declared).
 
+### Where the runtime API lands
+
+The host controls exactly how the runtime API (`useState`, `h`, `render`, …) is
+planted into plugin scope — there are no fixed bare globals. Three ways, from
+defaults to full control:
+
+```ts
+// 1) Default — a namespace object named "zushi".
+new Plugin({ jsx: true, /* … */ });
+//   plugin code: const { useState, render } = zushi;
+
+// 2) Pick the namespace, or `false` for bare globals.
+new Plugin({ jsx: true, namespace: "reearth" }); //   reearth.useState, …
+new Plugin({ jsx: true, namespace: false });     //   bare: useState, render, …
+
+// 3) `runtime` refs — place each function anywhere in your exposed tree.
+new Plugin({
+  jsx: true,
+  exposed: ({ surfaces, runtime }) => ({
+    reearth: {
+      ui: surfaces.ui.api,          // host value (marshaled)
+      useState: runtime.useState,   // runtime ref → resolved in the VM
+      render: runtime.render
+    }
+  })
+  //   plugin code: reearth.useState(…), reearth.render(…)
+});
+```
+
+Placing any `runtime` ref turns off the default `namespace` placement — you own
+the layout. Refs are opaque tokens that never cross into the VM; zushi pulls
+them out of the exposed tree and the in-VM runtime installs the real functions
+at those paths, sitting right alongside your marshaled host values.
+
+You can also wire everything by hand from the trusted [`setup`](#the-setup-slot)
+slot, and seal the bridge afterward:
+
+```ts
+new Plugin({
+  jsx: true,
+  namespace: false,                 // don't auto-plant anything
+  setup: `
+    // The full runtime is in scope here as bare names (and as __zushi.runtime).
+    globalThis.widget = { useState, h, render, AutoLayout: View };
+  `
+  // __zushi is deleted after setup by default, so plugin code can't reach the
+  // host bridge — pass exposeBridge: true to keep it.
+});
+```
+
 ### Writing JSX
 
 zushi doesn't transpile JSX — it only ships the runtime functions. Wire them up
-whichever way your build prefers:
+whichever way your build prefers (point the pragma/import at wherever you placed
+the API):
 
 ```ts
-// 1) Classic pragma — no imports, uses the VM globals.
-/** @jsx createElement */
-/** @jsxFrag Fragment */
+// 1) Classic pragma — point it at your placement (default namespace shown).
+/** @jsx zushi.createElement */
+/** @jsxFrag zushi.Fragment */
 
 // 2) Automatic runtime — set jsxImportSource to "@reearth/zushi"
 //    (tsconfig / esbuild / vite). Resolves to @reearth/zushi/jsx-runtime.
+//    Works regardless of placement (it uses an internal wiring).
 
-// 3) Explicit import (for bundled plugins).
+// 3) Explicit import (for bundled plugins). Also placement-independent.
 import { render, useState, createElement, Fragment } from "@reearth/zushi/jsx";
 ```
 
 All three produce the same `createElement` calls and run against the in-VM
-runtime; for plugins evaluated as a raw source string, the names are also
-available as bare globals.
+runtime. The automatic runtime and the explicit import are placement-independent;
+the classic pragma and bare destructuring must match where you placed the API.
 
 ### Custom components & restricting HTML
 
@@ -225,12 +281,17 @@ new Plugin({
       h("div", { style: { display: "flex", gap: p.gap, ...p.style } }, p.children));
     registerComponent("Text", (p) => h("span", { style: p.style }, p.children));
   `,
-  code: `render(h(View, { gap: 8 }, h(Text, null, "hello")));`
+  code: `
+    const { h, render } = zushi;     // registered View/Text are bare globals
+    render(h(View, { gap: 8 }, h(Text, null, "hello")));
+  `
 });
 ```
 
 `intrinsics` accepts `true` (any tag, default), `false` (none), or an allowlist
 of tag names. Tags emitted *inside* a registered component are always allowed.
+Registered components are exposed as bare globals by name (e.g. `View`), so
+plugin code uses them directly regardless of where the runtime API is placed.
 
 #### The `setup` slot
 
@@ -239,20 +300,24 @@ of tag names. Tags emitted *inside* a registered component are always allowed.
 marked trusted, so the markup they emit may use intrinsic tags even when
 `intrinsics` forbids them in plugin code.
 
-`registerComponent` is removed from the global scope once `setup` has run, so
-plugin code can't register (and so can't grant itself the intrinsic-tag
-privilege) — only `setup` can. Registered components remain available as globals
-by name. Set `exposeRegisterComponent: true` to keep the registrar reachable
-from plugin code.
-
-The full JSX runtime is in scope inside `setup` (and, except for
-`registerComponent`, in plugin code too):
+The full JSX runtime is in scope inside `setup` as **bare names** — including
+`registerComponent` — regardless of where it was placed for plugin code (setup
+runs inside `with (__zushi.runtime)`). The same bundle is reachable as
+`__zushi.runtime` for explicit wiring:
 
 - `registerComponent` (setup only by default)
 - `h` / `createElement`, `Fragment`, `render`
 - hooks — `useState`, `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`,
   `useCallback`, `useRef`, `useId`, `createContext`, `useContext`
 - `memo`, `ErrorBoundary`, `Suspense`
+
+`registerComponent` is **not** included in the default placement, so plugin code
+can't register (and so can't grant itself the intrinsic-tag privilege) — only
+`setup` can. Set `exposeRegisterComponent: true` to include it in the placement
+for plugin code too. After `setup` runs, the `__zushi` bridge is deleted from
+the VM globals so plugin code can't reach the host internals; pass
+`exposeBridge: true` to keep it. (The runtime functions keep working — they
+capture the bridge in a closure.)
 
 ### React-library compatibility (experimental)
 

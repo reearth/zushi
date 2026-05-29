@@ -99,15 +99,16 @@ describe("Plugin", () => {
       surfaces: { ui: { container } },
       setup: `registerComponent("View", (p) => h("div", null, p.children));`,
       exposed: () => ({ probe: (t: string) => seen.push(t) }),
-      // registerComponent is gone for plugin code, but the registered global stays
-      code: `probe(typeof registerComponent); probe(typeof View);`
+      // registerComponent is not in the default `zushi` namespace, but a
+      // component registered by the trusted setup stays available (bare).
+      code: `probe(typeof zushi.registerComponent); probe(typeof View);`
     });
     await plugin.start();
     expect(seen).toEqual(["undefined", "function"]);
     plugin.dispose();
   });
 
-  test("exposeRegisterComponent keeps it reachable from plugin code", async () => {
+  test("exposeRegisterComponent puts it in the namespace for plugin code", async () => {
     const seen: string[] = [];
     const plugin = new Plugin({
       backend: quickjs(),
@@ -115,10 +116,97 @@ describe("Plugin", () => {
       exposeRegisterComponent: true,
       surfaces: { ui: { container } },
       exposed: () => ({ probe: (t: string) => seen.push(t) }),
-      code: `probe(typeof registerComponent);`
+      code: `probe(typeof zushi.registerComponent);`
     });
     await plugin.start();
     expect(seen).toEqual(["function"]);
+    plugin.dispose();
+  });
+
+  test("default namespace exposes the runtime API under `zushi`", async () => {
+    const seen: Record<string, string> = {};
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      surfaces: { ui: { container } },
+      exposed: () => ({ probe: (k: string, t: string) => (seen[k] = t) }),
+      code: `
+        probe("nsUseState", typeof zushi.useState);
+        probe("nsRender", typeof zushi.render);
+        probe("bareUseState", typeof useState);   // not bare by default
+        probe("bridge", typeof __zushi);           // sealed after setup
+      `
+    });
+    await plugin.start();
+    expect(seen).toEqual({
+      nsUseState: "function",
+      nsRender: "function",
+      bareUseState: "undefined",
+      bridge: "undefined"
+    });
+    plugin.dispose();
+  });
+
+  test("namespace:false plants the runtime API as bare globals", async () => {
+    const seen: Record<string, string> = {};
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      namespace: false,
+      surfaces: { ui: { container } },
+      exposed: () => ({ probe: (k: string, t: string) => (seen[k] = t) }),
+      code: `
+        probe("useState", typeof useState);
+        probe("render", typeof render);
+        probe("zushi", typeof zushi);   // no namespace object created
+      `
+    });
+    await plugin.start();
+    expect(seen).toEqual({
+      useState: "function",
+      render: "function",
+      zushi: "undefined"
+    });
+    plugin.dispose();
+  });
+
+  test("runtime refs in exposed place the API at host-chosen paths", async () => {
+    const seen: Record<string, string> = {};
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      surfaces: { ui: { container } },
+      exposed: ({ runtime }) => ({
+        probe: (k: string, t: string) => (seen[k] = t),
+        reearth: { useState: runtime.useState, render: runtime.render }
+      }),
+      code: `
+        probe("reearthUseState", typeof reearth.useState);
+        probe("reearthRender", typeof reearth.render);
+        probe("zushi", typeof zushi);   // default placement suppressed
+      `
+    });
+    await plugin.start();
+    expect(seen).toEqual({
+      reearthUseState: "function",
+      reearthRender: "function",
+      zushi: "undefined"
+    });
+    plugin.dispose();
+  });
+
+  test("exposeBridge keeps __zushi reachable from plugin code", async () => {
+    const seen: string[] = [];
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      exposeBridge: true,
+      surfaces: { ui: { container } },
+      exposed: () => ({ probe: (t: string) => seen.push(t) }),
+      code: `probe(typeof __zushi); probe(typeof __zushi.runtime.useState);`
+    });
+    await plugin.start();
+    expect(seen).toEqual(["object", "function"]);
     plugin.dispose();
   });
 
