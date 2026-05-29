@@ -1,7 +1,7 @@
 import { Plugin } from "@reearth/zushi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { jsxComponents, jsxPluginSource } from "../../examples/src/jsxPluginSource";
+import { jsxSetup, jsxPluginSource } from "../../examples/src/jsxPluginSource";
 import { quickjs } from "../../examples/src/quickjs";
 
 // Drives the opt-in JSX runtime end-to-end in a real browser: a component with
@@ -83,7 +83,7 @@ describe("jsx runtime (browser)", () => {
     plugin = new Plugin({
       jsx: true,
       intrinsics: false, // plugin may only use registered components
-      components: jsxComponents,
+      setup: jsxSetup,
       surfaces: { ui: { container, autoResize: "both" } },
       quickjs,
       exposed: () => ({ host: { event } }),

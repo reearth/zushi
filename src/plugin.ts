@@ -48,12 +48,18 @@ export type PluginOptions = {
   jsx?: boolean;
   /**
    * Trusted JS source, evaluated in the VM after the JSX runtime and before the
-   * plugin, used to register custom components via `registerComponent(name, fn)`
-   * (à la Figma's `View`/`Text`). Markup these components emit may use intrinsic
-   * tags even when {@link intrinsics} forbids them in plugin code. Requires
-   * {@link jsx}.
+   * plugin. This is the *trusted setup slot*: its sole privilege over plugin
+   * code is timing — components registered here via `registerComponent(name, fn)`
+   * (à la Figma's `View`/`Text`) become trusted, so the markup they emit may use
+   * intrinsic tags even when {@link intrinsics} forbids them in plugin code.
+   *
+   * The full JSX runtime is in scope (same globals plugin code sees):
+   * `registerComponent`, `h`/`createElement`, `Fragment`, `render`, the hooks
+   * (`useState`, `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`,
+   * `useCallback`, `useRef`, `useId`, `createContext`, `useContext`), plus
+   * `memo`, `ErrorBoundary` and `Suspense`. Requires {@link jsx}.
    */
-  components?: string;
+  setup?: string;
   /**
    * Gates plugin-authored intrinsic (HTML) tags: `true` (default, any), `false`
    * (none — plugins must use registered components), or an allowlist of tags.
@@ -108,7 +114,7 @@ export class Plugin {
     }
 
     const bootstrap = options.jsx
-      ? VM_RUNTIME_SOURCE + (options.components ? "\n;" + options.components : "")
+      ? VM_RUNTIME_SOURCE + (options.setup ? "\n;" + options.setup : "")
       : undefined;
 
     this.sandbox = new Sandbox({

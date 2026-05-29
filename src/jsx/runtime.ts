@@ -47,7 +47,7 @@ export function render(
 
 /**
  * Register a trusted custom component, also made available as a global of the
- * same name. Typically called from the host's trusted `components` source, not
+ * same name. Typically called from the host's trusted `setup` source, not
  * from plugin code.
  */
 export function registerComponent(name: string, fn: Component): void {

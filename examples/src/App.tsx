@@ -2,7 +2,7 @@ import { type PluginContext, Plugin } from "@reearth/zushi";
 import { PluginView } from "@reearth/zushi/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { jsxComponents, jsxPluginSource } from "./jsxPluginSource";
+import { jsxSetup, jsxPluginSource } from "./jsxPluginSource";
 import { type ExampleHost, pluginSource } from "./pluginSource";
 import { quickjs } from "./quickjs";
 
@@ -120,7 +120,7 @@ function JsxExample() {
       <h2>JSX · render(&lt;App/&gt;)</h2>
       <PluginView
         jsx
-        components={jsxComponents}
+        setup={jsxSetup}
         intrinsics={false}
         code={jsxPluginSource}
         quickjs={quickjs}

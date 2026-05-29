@@ -19,7 +19,7 @@ type Dispatch = (
 
 function harness(
   code: string,
-  opts: { components?: string; intrinsics?: any; exposed?: Record<string, any> } = {}
+  opts: { setup?: string; intrinsics?: any; exposed?: Record<string, any> } = {}
 ) {
   const renders: (RenderPayload & { surface: string })[] = [];
   const errors: any[] = [];
@@ -27,7 +27,7 @@ function harness(
 
   const sandbox = new Sandbox({
     bootstrap:
-      VM_RUNTIME_SOURCE + (opts.components ? "\n;" + opts.components : ""),
+      VM_RUNTIME_SOURCE + (opts.setup ? "\n;" + opts.setup : ""),
     exposed: {
       ...opts.exposed,
       console: { error: (...a: any[]) => errors.push(a) },
@@ -203,7 +203,7 @@ describe("vm jsx runtime", () => {
       `,
       {
         intrinsics: false,
-        components: `
+        setup: `
           registerComponent("View", (p) =>
             h("div", { style: { display: "flex", gap: p.spacing } }, p.children));
           registerComponent("Text", (p) => h("span", null, p.children));

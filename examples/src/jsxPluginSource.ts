@@ -1,8 +1,8 @@
-// Trusted custom components (à la Figma's View/Text), registered in the VM
-// before the plugin runs. Only markup these emit may use intrinsic HTML tags
-// when the host sets `intrinsics: false` — so plugin code is confined to this
-// curated component vocabulary.
-export const jsxComponents = `
+// Trusted `setup` source: runs in the VM before the plugin and registers
+// custom components (à la Figma's View/Text). Only markup these emit may use
+// intrinsic HTML tags when the host sets `intrinsics: false` — so plugin code
+// is confined to this curated component vocabulary.
+export const jsxSetup = `
   registerComponent("View", (p) =>
     h("div", { style: {
       display: "flex",

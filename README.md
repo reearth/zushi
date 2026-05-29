@@ -4,9 +4,6 @@ A framework-agnostic plugin runtime for the browser. Run untrusted JavaScript in
 a [QuickJS](https://github.com/justjake/quickjs-emscripten) (WASM) VM, expose a
 host-defined API into it, and render plugin UI inside sandboxed `<iframe>`s.
 
-Extracted and generalized from the plugin mechanism of
-[Re:Earth Visualizer](https://github.com/reearth/reearth-visualizer).
-
 > The name comes from _zushi_ (厨子), a small Japanese cabinet that enshrines a precious object behind doors you open only when needed — much like a host that encloses an external module and opens it to render on demand.
 
 ## Why
@@ -182,7 +179,7 @@ new Plugin({
   jsx: true,
   surfaces: { ui: { container } },
   intrinsics: false, // plugins may not use raw HTML tags…
-  components: `
+  setup: `
     // …but trusted components, run in the VM before the plugin, may.
     registerComponent("View", (p) =>
       h("div", { style: { display: "flex", gap: p.gap, ...p.style } }, p.children));
@@ -194,6 +191,23 @@ new Plugin({
 
 `intrinsics` accepts `true` (any tag, default), `false` (none), or an allowlist
 of tag names. Tags emitted *inside* a registered component are always allowed.
+
+#### The `setup` slot
+
+`setup` is a trusted JS source evaluated in the VM **after** the JSX runtime and
+**before** the plugin. Its only privilege over plugin code is *timing*:
+components registered here via `registerComponent` are marked trusted, so the
+markup they emit may use intrinsic tags even when `intrinsics` forbids them in
+plugin code. (Anything `setup` can call, plugin code can call too — the boundary
+is "registered before the plugin", not a separate API surface.)
+
+The full JSX runtime is in scope inside `setup`:
+
+- `registerComponent`
+- `h` / `createElement`, `Fragment`, `render`
+- hooks — `useState`, `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`,
+  `useCallback`, `useRef`, `useId`, `createContext`, `useContext`
+- `memo`, `ErrorBoundary`, `Suspense`
 
 ### React-library compatibility (experimental)
 
