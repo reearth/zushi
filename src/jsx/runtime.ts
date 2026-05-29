@@ -64,6 +64,35 @@ export function useState<S>(
   return api().useState(initial);
 }
 
+/**
+ * Like {@link useState}, but the value lives in the host-owned synced store
+ * (shared across surfaces, drivable from the host, optionally persisted). See
+ * the docs on synced state.
+ */
+export function useSyncedState<S>(
+  key: string,
+  initial: S
+): [S, (next: S | ((prev: S) => S)) => void] {
+  return api().useSyncedState(key, initial);
+}
+
+/** A reactive handle to a synced last-writer-wins map stored under `name`. */
+export type SyncedMap<V = unknown> = {
+  get(key: string): V | undefined;
+  has(key: string): boolean;
+  set(key: string, value: V): void;
+  delete(key: string): void;
+  keys(): string[];
+  values(): V[];
+  entries(): [string, V][];
+  readonly size: number;
+};
+
+/** Like {@link useSyncedState} but for a whole map (Figma's `useSyncedMap`). */
+export function useSyncedMap<V = unknown>(name: string): SyncedMap<V> {
+  return api().useSyncedMap(name);
+}
+
 export function useReducer<S, A>(
   reducer: (state: S, action: A) => S,
   initialArg: S,

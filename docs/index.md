@@ -31,7 +31,9 @@ See [Concepts](./concepts.md) for the full data-flow picture.
 
 ### JSX UI (opt-in)
 - [JSX overview](./jsx/overview.md) — the in-VM runtime, hooks, writing JSX
+- [Runtime API reference](./jsx/runtime-api.md) — every hook & exposed function, with signatures
 - [Runtime API placement](./jsx/placement.md) — namespace, `runtime` refs, the `setup` slot, bridge sealing
+- [Synced state](./jsx/synced.md) — `useSyncedState` / `useSyncedMap` (shared, host-drivable, persisted)
 - [Components & intrinsics](./jsx/components.md) — `registerComponent`, trust, restricting HTML
 - [Renderers](./jsx/renderers.md) — iframe vs host-direct, react-konva, the patcher contract
 

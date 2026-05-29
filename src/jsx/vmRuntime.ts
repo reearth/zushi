@@ -149,6 +149,94 @@ function zushiVmRuntime() {
     return [hook.v, dispatch];
   }
 
+  // Synced state lives in a host-owned store (see ./syncedStore), reachable via
+  // the bridge. It survives dispose, is shared across surfaces, can be driven
+  // from the host, and may be persisted — unlike useState's VM-local state.
+  function useSyncedState(key: any, initial: any) {
+    const synced = bridge && bridge.synced;
+    const value = synced && synced.has(key) ? synced.get(key) : initial;
+    const ownerRoot = active;
+    const ownerRec = currentRec;
+    // Subscribe to host-side changes for this key; re-render on change.
+    useEffect(
+      function () {
+        if (!synced) return undefined;
+        return synced.subscribe(key, function () {
+          if (ownerRec) ownerRec.dirty = true;
+          requestRender(ownerRoot);
+        });
+      },
+      [key]
+    );
+    function set(next: any) {
+      const cur = synced && synced.has(key) ? synced.get(key) : initial;
+      const nv = typeof next === "function" ? next(cur) : next;
+      if (synced) synced.set(key, nv);
+      if (ownerRec) ownerRec.dirty = true;
+      requestRender(ownerRoot);
+    }
+    return [value, set];
+  }
+
+  // A synced last-writer-wins map, stored as one object under `name`. Mutations
+  // write a new object through the store (so reads stay reactive).
+  function useSyncedMap(name: any) {
+    const synced = bridge && bridge.synced;
+    const obj: any =
+      (synced && synced.has(name) ? synced.get(name) : null) || {};
+    const ownerRoot = active;
+    const ownerRec = currentRec;
+    useEffect(
+      function () {
+        if (!synced) return undefined;
+        return synced.subscribe(name, function () {
+          if (ownerRec) ownerRec.dirty = true;
+          requestRender(ownerRoot);
+        });
+      },
+      [name]
+    );
+    function write(nextObj: any) {
+      if (synced) synced.set(name, nextObj);
+      if (ownerRec) ownerRec.dirty = true;
+      requestRender(ownerRoot);
+    }
+    return {
+      get: function (k: any) {
+        return obj[k];
+      },
+      has: function (k: any) {
+        return Object.prototype.hasOwnProperty.call(obj, k);
+      },
+      set: function (k: any, v: any) {
+        const n = Object.assign({}, obj);
+        n[k] = v;
+        write(n);
+      },
+      delete: function (k: any) {
+        const n = Object.assign({}, obj);
+        delete n[k];
+        write(n);
+      },
+      keys: function () {
+        return Object.keys(obj);
+      },
+      values: function () {
+        return Object.keys(obj).map(function (k) {
+          return obj[k];
+        });
+      },
+      entries: function () {
+        return Object.keys(obj).map(function (k) {
+          return [k, obj[k]];
+        });
+      },
+      get size() {
+        return Object.keys(obj).length;
+      }
+    };
+  }
+
   function useId() {
     const slot = currentHookIndex;
     const base = currentPath;
@@ -617,6 +705,8 @@ function zushiVmRuntime() {
     jsxDEV: jsx,
     registerComponent: registerComponent,
     useState: useState,
+    useSyncedState: useSyncedState,
+    useSyncedMap: useSyncedMap,
     useReducer: useReducer,
     useEffect: useEffect,
     useLayoutEffect: useEffect, // no separate layout phase; same semantics

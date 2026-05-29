@@ -54,6 +54,8 @@ export const RUNTIME_API_NAMES = [
   "jsxDEV",
   "registerComponent",
   "useState",
+  "useSyncedState",
+  "useSyncedMap",
   "useReducer",
   "useEffect",
   "useLayoutEffect",

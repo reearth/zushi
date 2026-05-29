@@ -280,6 +280,105 @@ describe("Plugin", () => {
     plugin.dispose();
   });
 
+  test("useSyncedState shares state two-way with the host", async () => {
+    let tree: any = null;
+    let gen = 0;
+    let fire: ((hid: number, type: string, payload: any, g: number) => void) | null =
+      null;
+    const hostRenderer = {
+      name: "fake",
+      target: "host" as const,
+      mount(_c: HTMLElement, ctx: { onEvent: any }) {
+        fire = ctx.onEvent;
+        return {
+          render(t: any[], g: number) {
+            tree = t;
+            gen = g;
+          },
+          dispose() {}
+        };
+      }
+    };
+    const text = () => tree?.[0]?.c?.[0]?.x;
+
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      renderer: hostRenderer,
+      surfaces: { ui: { container } },
+      synced: { initial: { count: 1 } },
+      code: `
+        const { useSyncedState, h, render } = zushi;
+        function App() {
+          const [n, setN] = useSyncedState("count", 0);
+          return h("button", { onClick: () => setN(n + 1) }, "n=" + n);
+        }
+        render(h(App));
+      `
+    });
+    await plugin.start();
+
+    // Seeded initial value is read on first render.
+    expect(text()).toBe("n=1");
+    expect(plugin.synced!.get("count")).toBe(1);
+
+    // plugin → host: a click bumps the synced value the host can read.
+    fire!(tree[0].ev[0].h, "click", {}, gen);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(plugin.synced!.get("count")).toBe(2);
+    expect(text()).toBe("n=2");
+
+    // host → plugin: setting from the host re-renders the plugin.
+    plugin.synced!.set("count", 9);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(text()).toBe("n=9");
+    plugin.dispose();
+  });
+
+  test("useSyncedMap stores a reactive map the host can read", async () => {
+    let tree: any = null;
+    let gen = 0;
+    let fire: ((hid: number, type: string, payload: any, g: number) => void) | null =
+      null;
+    const hostRenderer = {
+      name: "fake",
+      target: "host" as const,
+      mount(_c: HTMLElement, ctx: { onEvent: any }) {
+        fire = ctx.onEvent;
+        return {
+          render(t: any[], g: number) {
+            tree = t;
+            gen = g;
+          },
+          dispose() {}
+        };
+      }
+    };
+
+    const plugin = new Plugin({
+      backend: quickjs(),
+      jsx: true,
+      renderer: hostRenderer,
+      surfaces: { ui: { container } },
+      code: `
+        const { useSyncedMap, h, render } = zushi;
+        function App() {
+          const items = useSyncedMap("items");
+          return h("button", { onClick: () => items.set("a", 1) }, "size=" + items.size);
+        }
+        render(h(App));
+      `
+    });
+    await plugin.start();
+    expect(tree[0].c[0].x).toBe("size=0");
+
+    fire!(tree[0].ev[0].h, "click", {}, gen);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(tree[0].c[0].x).toBe("size=1");
+    expect(plugin.synced!.get("items")).toEqual({ a: 1 });
+    plugin.dispose();
+  });
+
   test("creates no surfaces by default", async () => {
     const plugin = new Plugin({ backend: quickjs(), code: `1;` });
     await plugin.start();

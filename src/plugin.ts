@@ -11,10 +11,12 @@ import {
   VM_RUNTIME_SOURCE,
   makeRuntimeRefs,
   extractPlacements,
+  SyncedStore,
   type RuntimeRefs,
   type IntrinsicsPolicy,
   type RuntimeNamespace,
-  type AnyRenderer
+  type AnyRenderer,
+  type SyncedStoreOptions
 } from "./jsx";
 import { merge } from "./utils/merge";
 
@@ -125,6 +127,13 @@ export type PluginOptions = {
    * Requires {@link jsx}.
    */
   renderer?: AnyRenderer;
+  /**
+   * Configures the host-owned synced store backing `useSyncedState` /
+   * `useSyncedMap` (see {@link Plugin.synced}). A store is created whenever
+   * {@link jsx} is enabled; pass this to seed values, persist across reloads,
+   * or observe changes. Requires {@link jsx}.
+   */
+  synced?: SyncedStoreOptions;
   /** Builds the host-specific API merged into the exposed globals. */
   exposed?: (ctx: PluginContext) => Record<string, any>;
   /**
@@ -151,6 +160,13 @@ export type PluginOptions = {
 export class Plugin {
   readonly surfaces: Record<string, UISurface> = {};
   readonly sandbox: Sandbox;
+  /**
+   * The host-owned synced store backing `useSyncedState` / `useSyncedMap`.
+   * Present when {@link PluginOptions.jsx} is enabled. The host can `get`,
+   * `set`, `delete`, list `keys`, and `subscribe` to it — shared two-way with
+   * the plugin. See {@link SyncedStore}.
+   */
+  readonly synced?: SyncedStore;
 
   private ownedContainers: HTMLElement[] = [];
   private jsxHost?: JsxHost;
@@ -178,11 +194,13 @@ export class Plugin {
     }
 
     if (options.jsx) {
+      this.synced = new SyncedStore(options.synced);
       this.jsxHost = new JsxHost({
         surfaces: this.surfaces,
         intrinsics: options.intrinsics,
         renderer: options.renderer,
         startEventLoop,
+        synced: this.synced,
         namespace: options.namespace,
         exposeRegisterComponent: options.exposeRegisterComponent
       });
@@ -232,8 +250,10 @@ export class Plugin {
   }
 
   /** Initialize the VM and run the plugin. */
-  start(): Promise<void> {
-    return this.sandbox.start();
+  async start(): Promise<void> {
+    // Load persisted synced state into memory before the plugin reads it.
+    if (this.synced) await this.synced.hydrate();
+    await this.sandbox.start();
   }
 
   /** Forward an external message to plugin message listeners. */

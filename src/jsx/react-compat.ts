@@ -18,6 +18,9 @@ export const createElement = (...args: any[]) => api().createElement(...args);
 export const Fragment = "__zushi.Fragment";
 
 export const useState = (initial: any) => api().useState(initial);
+export const useSyncedState = (key: string, initial: any) =>
+  api().useSyncedState(key, initial);
+export const useSyncedMap = (name: string) => api().useSyncedMap(name);
 export const useReducer = (r: any, i: any, init?: any) => api().useReducer(r, i, init);
 export const useEffect = (fn: any, deps?: any) => api().useEffect(fn, deps);
 export const useLayoutEffect = (fn: any, deps?: any) => api().useLayoutEffect(fn, deps);
@@ -58,6 +61,8 @@ export default {
   createElement,
   Fragment,
   useState,
+  useSyncedState,
+  useSyncedMap,
   useReducer,
   useEffect,
   useLayoutEffect,

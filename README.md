@@ -62,7 +62,7 @@ Full docs live in [`docs/`](./docs):
 
 - **[Getting started](./docs/getting-started.md)** · [Concepts](./docs/concepts.md) (architecture, event loop, messaging, lifecycle)
 - **Core** — [Backends](./docs/backends.md) · [Surfaces & iframes](./docs/surfaces.md) · [Exposing a host API](./docs/exposing-api.md)
-- **JSX UI (opt-in)** — [Overview](./docs/jsx/overview.md) · [Runtime API placement](./docs/jsx/placement.md) · [Components & intrinsics](./docs/jsx/components.md) · [Renderers (canvas, etc.)](./docs/jsx/renderers.md)
+- **JSX UI (opt-in)** — [Overview](./docs/jsx/overview.md) · [Runtime API reference](./docs/jsx/runtime-api.md) · [Placement](./docs/jsx/placement.md) · [Synced state](./docs/jsx/synced.md) · [Components & intrinsics](./docs/jsx/components.md) · [Renderers (canvas, etc.)](./docs/jsx/renderers.md)
 - **Integration** — [React adapter](./docs/react.md) · [Storage & events](./docs/storage-and-events.md) · [Security model](./docs/security.md)
 
 Exact option/type signatures are documented inline via TSDoc and shipped as

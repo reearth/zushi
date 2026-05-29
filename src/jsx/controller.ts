@@ -6,6 +6,7 @@ import {
   type HostRenderer,
   type HostRendererInstance
 } from "./renderer";
+import type { SyncedStore } from "./syncedStore";
 import {
   MSG_EVENT,
   MSG_RENDER,
@@ -127,9 +128,12 @@ export type JsxHostOptions = {
   /**
    * Pumps the VM job loop. Iframe renderers pump via the surface's message
    * channel; host-direct renderers deliver events in-realm, so the host must
-   * pump after dispatching one (so the resulting re-render runs).
+   * pump after dispatching one (so the resulting re-render runs). Also pumped
+   * after any {@link synced} store change so synced-state re-renders run.
    */
   startEventLoop?: () => void;
+  /** Backing store for `useSyncedState` / `useSyncedMap` (exposed via the bridge). */
+  synced?: SyncedStore;
   /** Default placement for the runtime API (see {@link RuntimeNamespace}). */
   namespace?: RuntimeNamespace;
   /** Whether `registerComponent` is included in the default placement. */
@@ -148,6 +152,8 @@ export class JsxHost {
   private namespace: RuntimeNamespace;
   private exposeRegisterComponent: boolean;
   private startEventLoop?: () => void;
+  private synced?: SyncedStore;
+  private unsubSynced?: () => void;
   private placements: RuntimePlacement[] = [];
 
   private names: SurfaceId[];
@@ -157,6 +163,12 @@ export class JsxHost {
     this.namespace = options.namespace ?? "zushi";
     this.exposeRegisterComponent = options.exposeRegisterComponent ?? false;
     this.startEventLoop = options.startEventLoop;
+    this.synced = options.synced;
+    // Pump the VM job loop after any synced change (host- or plugin-initiated)
+    // so the resulting re-render runs.
+    if (this.synced && this.startEventLoop) {
+      this.unsubSynced = this.synced.subscribe(() => this.startEventLoop!());
+    }
     const renderer = options.renderer ?? domRenderer;
     const host = isHostRenderer(renderer);
     this.names = Object.keys(options.surfaces);
@@ -187,6 +199,7 @@ export class JsxHost {
   /** Tear down all controllers (host renderers unmount their roots). */
   dispose(): void {
     for (const c of this.controllers.values()) c.dispose();
+    this.unsubSynced?.();
   }
 
   /**
@@ -202,6 +215,7 @@ export class JsxHost {
   get bridge(): {
     render: (surfaceId: SurfaceId, payload: RenderPayload, options?: any) => void;
     ready: (dispatch: DispatchFn) => void;
+    synced?: VmSyncedApi;
     config: {
       intrinsics: IntrinsicsPolicy;
       surfaces: SurfaceId[];
@@ -211,12 +225,24 @@ export class JsxHost {
       exposeRegisterComponent: boolean;
     };
   } {
+    const synced = this.synced;
     return {
       render: (surfaceId, payload, options) =>
         this.controllers.get(surfaceId)?.push(payload, options),
       ready: (dispatch) => {
         this.dispatch = dispatch;
       },
+      // VM-facing synced-store facade (used by useSyncedState / useSyncedMap).
+      synced: synced
+        ? {
+            has: (k) => synced.has(k),
+            get: (k) => synced.get(k),
+            set: (k, v) => synced.set(k, v),
+            delete: (k) => synced.delete(k),
+            keys: () => synced.keys(),
+            subscribe: (k, cb) => synced.subscribeKey(k, cb)
+          }
+        : undefined,
       config: {
         intrinsics: this.intrinsics,
         surfaces: this.names,
@@ -233,3 +259,13 @@ export class JsxHost {
     };
   }
 }
+
+/** The synced-store facade marshaled into the VM as `__zushi.synced`. */
+type VmSyncedApi = {
+  has: (key: string) => boolean;
+  get: (key: string) => unknown;
+  set: (key: string, value: unknown) => void;
+  delete: (key: string) => void;
+  keys: () => string[];
+  subscribe: (key: string, cb: () => void) => () => void;
+};

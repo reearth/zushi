@@ -1,6 +1,7 @@
 import { JsxExample } from "./jsxExample";
 import { KonvaExample } from "./konvaExample";
 import { ReactExample } from "./reactExample";
+import { SyncedExample } from "./syncedExample";
 import { VanillaExample } from "./vanillaExample";
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
         <ReactExample />
         <VanillaExample />
         <JsxExample />
+        <SyncedExample />
         <KonvaExample />
       </div>
     </main>

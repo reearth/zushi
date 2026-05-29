@@ -22,6 +22,9 @@ await storage.dropStore(instanceId);         // wipe an instance's store
 instances without collisions. The backing store name defaults to
 `zushi-plugin-${instanceId}`.
 
+`ClientStorage` is also the persistence backing for
+[synced state](./jsx/synced.md) (`useSyncedState` with `persist: true`).
+
 ## The event emitter
 
 `events<E>()` creates a typed event emitter, returning a `[listener, emit]`

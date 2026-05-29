@@ -29,6 +29,9 @@ new Plugin({
 - **Hooks**: `useState`, `useReducer`, `useEffect`, `useLayoutEffect` (alias of
   `useEffect` — there's no separate layout phase in the VM), `useMemo`,
   `useCallback`, `useRef`, `useId`, `createContext` / `useContext`.
+- **[Synced state](./synced.md)**: `useSyncedState` / `useSyncedMap` — like
+  `useState` but in a host-owned store that's shared across surfaces, drivable
+  from the host, and optionally persisted.
 - **Also**: `memo(Component, areEqual?)`, an `ErrorBoundary`
   (`{ fallback, onError }`), and a basic `Suspense` (`{ fallback }`) that shows
   the fallback while a child throws a thenable and re-renders when it settles.
@@ -39,6 +42,9 @@ new Plugin({
 Without `surface` it targets the surface named `"ui"` (or the only one declared
 if there's a single surface under another name). Each surface reconciles
 independently.
+
+**Signatures and per-function behavior:** see the
+[runtime API reference](./runtime-api.md).
 
 ## How it works (and why it's safe)
 
@@ -86,6 +92,8 @@ survives VM marshaling and bundling — identity is by value.
 
 ## Next
 
+- [Runtime API reference](./runtime-api.md) — every hook & function, with signatures
 - [Runtime API placement](./placement.md) — where `useState` & co. land, and the `setup` slot
+- [Synced state](./synced.md) — shared/persisted state via `useSyncedState` / `useSyncedMap`
 - [Components & intrinsics](./components.md) — curated component vocabularies, restricting HTML
 - [Renderers](./renderers.md) — draw to canvas instead of DOM
