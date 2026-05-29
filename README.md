@@ -1,4 +1,4 @@
-# @reearth/zushi
+# zushi
 
 A framework-agnostic plugin runtime for the browser. Run untrusted JavaScript in
 a [QuickJS](https://github.com/justjake/quickjs-emscripten) (WASM) VM, expose a
