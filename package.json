@@ -35,6 +35,10 @@
     "./jsx-dev-runtime": {
       "types": "./dist/jsx-dev-runtime.d.ts",
       "import": "./dist/jsx-dev-runtime.js"
+    },
+    "./react-compat": {
+      "types": "./dist/react-compat.d.ts",
+      "import": "./dist/react-compat.js"
     }
   },
   "scripts": {

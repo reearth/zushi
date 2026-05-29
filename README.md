@@ -137,6 +137,10 @@ const plugin = new Plugin({
 - **Hooks**: `useState`, `useReducer`, `useEffect`, `useLayoutEffect`,
   `useMemo`, `useCallback`, `useRef`, `useId`, and `createContext` /
   `useContext`.
+- **Also**: `memo(Component, areEqual?)`, an `ErrorBoundary`
+  (`{ fallback, onError }`), and a basic `Suspense` (`{ fallback }`) that shows
+  the fallback while a child throws a thenable and re-renders when it settles
+  (no `lazy()` — the VM has no module loader).
 - **Reconciliation runs in the VM**: components and hooks are resolved to an
   intrinsic-only tree there (no per-node marshalling); only plain JSON crosses
   to the host. Event handlers never leave the VM — they're referenced by id and
@@ -190,6 +194,16 @@ new Plugin({
 
 `intrinsics` accepts `true` (any tag, default), `false` (none), or an allowlist
 of tag names. Tags emitted *inside* a registered component are always allowed.
+
+### React-library compatibility (experimental)
+
+This is a React-*like* runtime, not React. Third-party libraries that import
+from `"react"` won't bind to it by default. As a best-effort escape hatch,
+alias your bundler's `"react"` to `@reearth/zushi/react-compat` (and set
+`jsxImportSource` to `"@reearth/zushi"`); *headless* libraries that only use
+hooks and elements may then run inside the VM. Anything touching `react-dom`,
+real DOM refs, portals, or concurrent features will not work — treat this as a
+subset, not full compatibility.
 
 ## Architecture
 

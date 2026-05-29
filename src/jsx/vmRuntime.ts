@@ -56,7 +56,10 @@ function zushiVmRuntime() {
         : props.children != null
           ? flatten([props.children])
           : [];
-    props.children = children; // expose to components as `props.children`
+    // Expose to components as `props.children`, but leave it unset when empty so
+    // childless elements stay shallow-equal across renders (lets `memo` bail).
+    if (children.length) props.children = children;
+    else delete props.children;
     return {
       type: type,
       props: props,
@@ -71,7 +74,8 @@ function zushiVmRuntime() {
     props = props || {};
     const ch = props.children;
     const children = ch == null ? [] : Array.isArray(ch) ? flatten(ch) : [ch];
-    props.children = children;
+    if (children.length) props.children = children;
+    else delete props.children;
     return {
       type: type,
       props: props,
@@ -100,6 +104,9 @@ function zushiVmRuntime() {
   let currentHooks: any[] | null = null;
   let currentHookIndex = 0;
   let currentPath = "";
+  // The component record currently rendering; lets state updates mark it dirty
+  // so `memo` can't wrongly bail it out on the next render.
+  let currentRec: any = null;
 
   function getHook(init: any) {
     const hooks = currentHooks as any[];
@@ -110,6 +117,7 @@ function zushiVmRuntime() {
 
   function useState(initial: any) {
     const ownerRoot = active;
+    const ownerRec = currentRec;
     const hook = getHook(function () {
       return { v: typeof initial === "function" ? initial() : initial };
     });
@@ -117,6 +125,7 @@ function zushiVmRuntime() {
       const nv = typeof next === "function" ? next(hook.v) : next;
       if (!Object.is(nv, hook.v)) {
         hook.v = nv;
+        if (ownerRec) ownerRec.dirty = true;
         requestRender(ownerRoot);
       }
     }
@@ -125,6 +134,7 @@ function zushiVmRuntime() {
 
   function useReducer(reducer: any, initialArg: any, init: any) {
     const ownerRoot = active;
+    const ownerRec = currentRec;
     const hook = getHook(function () {
       return { v: typeof init === "function" ? init(initialArg) : initialArg };
     });
@@ -132,6 +142,7 @@ function zushiVmRuntime() {
       const nv = reducer(hook.v, action);
       if (!Object.is(nv, hook.v)) {
         hook.v = nv;
+        if (ownerRec) ownerRec.dirty = true;
         requestRender(ownerRoot);
       }
     }
@@ -208,6 +219,39 @@ function zushiVmRuntime() {
     if (!ctx) return undefined;
     return ctx._s.length ? ctx._s[ctx._s.length - 1] : ctx._d;
   }
+
+  // memo: wraps a component so it re-uses its last output when props are
+  // shallow-equal and its own state hasn't changed (see renderComponent).
+  function memo(fn: any, areEqual: any) {
+    function Memo(props: any) {
+      return fn(props);
+    }
+    Memo._memo = fn;
+    Memo._memoEq = typeof areEqual === "function" ? areEqual : null;
+    return Memo;
+  }
+
+  function shallowEqual(a: any, b: any): boolean {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    for (const k in a) if (!(k in b) || !Object.is(a[k], b[k])) return false;
+    for (const k in b) if (!(k in a)) return false;
+    return true;
+  }
+
+  // Error boundary: catches errors thrown while rendering its subtree and shows
+  // `fallback` (a node or `(error) => node`) instead.
+  function ErrorBoundary(props: any) {
+    return props.children;
+  }
+  (ErrorBoundary as any)._eb = true;
+
+  // Suspense: catches a thrown thenable from its subtree, shows `fallback`, and
+  // re-renders when the promise settles.
+  function Suspense(props: any) {
+    return props.children;
+  }
+  (Suspense as any)._sus = true;
 
   // ---- per-surface roots ------------------------------------------------
 
@@ -404,20 +448,68 @@ function zushiVmRuntime() {
     };
   }
 
+  // Collapses a component/fragment's serialized children to a single node when
+  // possible, else wraps them in a structural div (kept 1:1 with the JSX).
+  function collapse(rendered: any[]): any {
+    if (rendered.length === 1) return rendered[0];
+    return { t: "div", p: {}, ev: [], c: rendered };
+  }
+
   function renderComponent(node: any, path: string): any {
+    const type = node.type;
+
     // Context provider: bracket descendant rendering with the pushed value
     // instead of running a component body / allocating hooks.
-    const ctx = node.type._ctx;
+    const ctx = type._ctx;
     if (ctx) {
       ctx._s.push(node.props ? node.props.value : undefined);
-      let rendered: any[];
       try {
-        rendered = renderChildren(node.children, path);
+        return collapse(renderChildren(node.children, path));
       } finally {
         ctx._s.pop();
       }
-      if (rendered.length === 1) return rendered[0];
-      return { t: "div", p: {}, ev: [], c: rendered };
+    }
+
+    // Error boundary: render children, falling back on a thrown (non-thenable)
+    // error.
+    if (type._eb) {
+      const mark = active.pendingEffects.length;
+      try {
+        return collapse(renderChildren(node.children, path));
+      } catch (err: any) {
+        if (err && typeof err.then === "function") throw err; // for Suspense
+        active.pendingEffects.length = mark;
+        if (typeof node.props.onError === "function") {
+          try {
+            node.props.onError(err);
+          } catch (e) {
+            reportError(e);
+          }
+        }
+        const fb =
+          typeof node.props.fallback === "function"
+            ? node.props.fallback(err)
+            : node.props.fallback;
+        return collapse(renderChildren([fb], path + "~"));
+      }
+    }
+
+    // Suspense: show fallback while a thrown thenable is pending, and re-render
+    // when it settles.
+    if (type._sus) {
+      const mark = active.pendingEffects.length;
+      try {
+        return collapse(renderChildren(node.children, path));
+      } catch (err: any) {
+        if (!err || typeof err.then !== "function") throw err;
+        active.pendingEffects.length = mark;
+        const ownerRoot = active;
+        const retry = function () {
+          requestRender(ownerRoot);
+        };
+        err.then(retry, retry);
+        return collapse(renderChildren([node.props.fallback], path + "~"));
+      }
     }
 
     active.visited[path] = true;
@@ -427,33 +519,46 @@ function zushiVmRuntime() {
       active.componentStore[path] = rec;
     }
 
-    const isTrusted = trusted.has(node.type);
+    // memo: bail out to the cached output when props are shallow-equal and the
+    // component's own state hasn't changed since the last render.
+    const memoFn = type._memo;
+    if (memoFn && rec.hasOutput && !rec.dirty) {
+      const eq = type._memoEq
+        ? type._memoEq(rec.props, node.props)
+        : shallowEqual(rec.props, node.props);
+      if (eq) return collapse(renderChildren([rec.output], path + "|"));
+    }
+
+    const bodyFn = memoFn || type;
+    const isTrusted = trusted.has(type);
     const prevHooks = currentHooks;
     const prevIndex = currentHookIndex;
     const prevPath = currentPath;
+    const prevRec = currentRec;
     currentHooks = rec.hooks;
     currentHookIndex = 0;
     currentPath = path;
+    currentRec = rec;
+    rec.dirty = false;
     if (isTrusted) trustDepth++;
     let output: any;
     try {
-      output = node.type(node.props);
-    } catch (err) {
-      reportError(err);
-      output = null;
+      output = bodyFn(node.props);
     } finally {
       if (isTrusted) trustDepth--;
       currentHooks = prevHooks;
       currentHookIndex = prevIndex;
       currentPath = prevPath;
+      currentRec = prevRec;
     }
 
-    // A component renders to a single subtree; reuse renderChildren so the
-    // output may itself be a fragment/array, but collapse to one node when it
-    // is a single element (to keep DOM structure 1:1 with the JSX).
-    const rendered = renderChildren([output], path + "|");
-    if (rendered.length === 1) return rendered[0];
-    return { t: "div", p: {}, ev: [], c: rendered };
+    if (memoFn) {
+      rec.output = output;
+      rec.props = node.props;
+      rec.hasOutput = true;
+    }
+
+    return collapse(renderChildren([output], path + "|"));
   }
 
   function serializeProps(props: any): { p: any; ev: any[] } {
@@ -521,6 +626,9 @@ function zushiVmRuntime() {
   g.useId = useId;
   g.createContext = createContext;
   g.useContext = useContext;
+  g.memo = memo;
+  g.ErrorBoundary = ErrorBoundary;
+  g.Suspense = Suspense;
   g.render = render;
 
   if (bridge && typeof bridge.ready === "function") bridge.ready(dispatch);

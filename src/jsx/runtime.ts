@@ -108,3 +108,30 @@ export function createContext<T>(defaultValue: T): Context<T> {
 export function useContext<T>(context: Context<T>): T {
   return g.useContext(context);
 }
+
+/** Memoize a component: re-uses its last render when props are shallow-equal. */
+export function memo<P>(
+  component: (props: P) => unknown,
+  areEqual?: (prev: P, next: P) => boolean
+): (props: P) => unknown {
+  return g.memo(component, areEqual);
+}
+
+/**
+ * Catches errors thrown while rendering its children and shows `fallback`
+ * (a node or `(error) => node`) instead.
+ */
+export const ErrorBoundary: (props: {
+  fallback: unknown | ((error: unknown) => unknown);
+  onError?: (error: unknown) => void;
+  children?: unknown;
+}) => unknown = (g as any).ErrorBoundary;
+
+/**
+ * Shows `fallback` while a child throws a thenable, then re-renders when it
+ * settles. (No `lazy()` — the VM has no module loader.)
+ */
+export const Suspense: (props: {
+  fallback: unknown;
+  children?: unknown;
+}) => unknown = (g as any).Suspense;

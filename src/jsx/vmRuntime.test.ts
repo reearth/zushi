@@ -19,7 +19,7 @@ type Dispatch = (
 
 function harness(
   code: string,
-  opts: { components?: string; intrinsics?: any } = {}
+  opts: { components?: string; intrinsics?: any; exposed?: Record<string, any> } = {}
 ) {
   const renders: (RenderPayload & { surface: string })[] = [];
   const errors: any[] = [];
@@ -29,6 +29,7 @@ function harness(
     bootstrap:
       VM_RUNTIME_SOURCE + (opts.components ? "\n;" + opts.components : ""),
     exposed: {
+      ...opts.exposed,
       console: { error: (...a: any[]) => errors.push(a) },
       __zushi: {
         config: { intrinsics: opts.intrinsics ?? true },
@@ -274,6 +275,99 @@ describe("vm jsx runtime", () => {
     expect(typeof a).toBe("string");
     expect(a).not.toBe(b); // distinct component instances -> distinct ids
     expect(root.c[0].c[0].x).toBe(a); // and it's stable within the render
+    h.sandbox.dispose();
+  });
+
+  test("ErrorBoundary renders fallback when a child throws", async () => {
+    const h = harness(`
+      function Boom() { throw new Error("kaboom"); }
+      function Ok() { return createElement("span", null, "ok"); }
+      render(createElement("div", null,
+        createElement(ErrorBoundary, { fallback: createElement("span", null, "caught") },
+          createElement(Boom, null)),
+        createElement(Ok, null)
+      ));
+    `);
+    await h.sandbox.start();
+
+    const root = h.renders[0].tree[0] as any;
+    expect(root.c[0].c[0].x).toBe("caught"); // boundary fallback
+    expect(root.c[1].c[0].x).toBe("ok"); // sibling still rendered
+    h.sandbox.dispose();
+  });
+
+  test("ErrorBoundary fallback can be a function of the error", async () => {
+    const h = harness(`
+      function Boom() { throw new Error("nope"); }
+      render(createElement(ErrorBoundary,
+        { fallback: (e) => createElement("span", null, "err:" + e.message) },
+        createElement(Boom, null)));
+    `);
+    await h.sandbox.start();
+    expect((h.renders[0].tree[0] as any).c[0].x).toBe("err:nope");
+    h.sandbox.dispose();
+  });
+
+  test("memo skips re-rendering when props are unchanged", async () => {
+    let childRenders = 0;
+    const h = harness(
+      `
+        const Child = memo(function (p) {
+          host.rendered();
+          return createElement("span", null, "label:" + p.label);
+        });
+        function App() {
+          const [n, setN] = useState(0);
+          return createElement("div", { onClick: () => setN(n + 1) },
+            createElement("span", null, "n:" + n),
+            createElement(Child, { label: "fixed" })
+          );
+        }
+        render(createElement(App, null));
+      `,
+      { exposed: { host: { rendered: () => { childRenders++; } } } }
+    );
+    await h.sandbox.start();
+    expect(childRenders).toBe(1);
+    expect((h.renders[0].tree[0] as any).c[1].c[0].x).toBe("label:fixed");
+
+    // Bump App's state; Child's props are unchanged so its body must not re-run.
+    h.dispatchEvent(1, "click", {});
+    await tick();
+    expect((h.last()!.tree[0] as any).c[0].c[0].x).toBe("n:1");
+    expect((h.last()!.tree[0] as any).c[1].c[0].x).toBe("label:fixed");
+    expect(childRenders).toBe(1); // memo bailed: body not re-run
+    h.sandbox.dispose();
+  });
+
+  test("Suspense shows fallback then content when a thenable settles", async () => {
+    let resolve!: (v: string) => void;
+    const ready = new Promise<string>((r) => {
+      resolve = r;
+    });
+    const h = harness(
+      `
+        let done = false, value;
+        host.ready.then((v) => { value = v; done = true; });
+        function Async() {
+          if (!done) throw host.ready;
+          return createElement("span", null, value);
+        }
+        render(createElement(Suspense,
+          { fallback: createElement("span", null, "loading") },
+          createElement(Async, null)));
+      `,
+      { exposed: { host: { ready } } }
+    );
+    await h.sandbox.start();
+    expect((h.renders[0].tree[0] as any).c[0].x).toBe("loading");
+
+    resolve("done");
+    await tick();
+    h.sandbox.requestEventLoop();
+    await tick();
+
+    expect((h.last()!.tree[0] as any).c[0].x).toBe("done");
     h.sandbox.dispose();
   });
 
