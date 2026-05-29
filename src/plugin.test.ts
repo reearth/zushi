@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { Plugin } from "./plugin";
+import { quickjs } from "./runtime";
 
 describe("Plugin", () => {
   let container: HTMLElement;
@@ -16,6 +17,7 @@ describe("Plugin", () => {
 
   test("hands declared surfaces to exposed and renders UI", async () => {
     const plugin = new Plugin({
+      backend: quickjs(),
       surfaces: { main: { container } },
       code: `
         reearth.ui.show("<div>hello plugin</div>");
@@ -42,6 +44,7 @@ describe("Plugin", () => {
   test("plugin receives messages posted from its UI iframe", async () => {
     const received: any[] = [];
     const plugin = new Plugin({
+      backend: quickjs(),
       surfaces: { ui: { container } },
       exposed: ({ surfaces }) => ({
         out: { record: (m: any) => received.push(m) },
@@ -77,6 +80,7 @@ describe("Plugin", () => {
   test("creates a hidden container for a surface without one, and removes it on dispose", async () => {
     const before = document.body.querySelectorAll("div").length;
     const plugin = new Plugin({
+      backend: quickjs(),
       surfaces: { ui: { container }, modal: {} }, // modal has no container
       code: `1;`
     });
@@ -90,6 +94,7 @@ describe("Plugin", () => {
   test("seals registerComponent from plugin code by default", async () => {
     const seen: string[] = [];
     const plugin = new Plugin({
+      backend: quickjs(),
       jsx: true,
       surfaces: { ui: { container } },
       setup: `registerComponent("View", (p) => h("div", null, p.children));`,
@@ -105,6 +110,7 @@ describe("Plugin", () => {
   test("exposeRegisterComponent keeps it reachable from plugin code", async () => {
     const seen: string[] = [];
     const plugin = new Plugin({
+      backend: quickjs(),
       jsx: true,
       exposeRegisterComponent: true,
       surfaces: { ui: { container } },
@@ -117,7 +123,7 @@ describe("Plugin", () => {
   });
 
   test("creates no surfaces by default", async () => {
-    const plugin = new Plugin({ code: `1;` });
+    const plugin = new Plugin({ backend: quickjs(), code: `1;` });
     await plugin.start();
     expect(Object.keys(plugin.surfaces)).toEqual([]);
     plugin.dispose();

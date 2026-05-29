@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { Sandbox } from "../runtime";
+import { Sandbox, quickjs } from "../runtime";
 import { VM_RUNTIME_SOURCE } from "./vmRuntime";
 import type { RenderPayload } from "./protocol";
 
@@ -26,6 +26,7 @@ function harness(
   let dispatch: Dispatch | undefined;
 
   const sandbox = new Sandbox({
+    backend: quickjs(),
     bootstrap:
       VM_RUNTIME_SOURCE + (opts.setup ? "\n;" + opts.setup : ""),
     exposed: {

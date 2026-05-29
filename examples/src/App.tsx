@@ -1,10 +1,14 @@
-import { type PluginContext, Plugin } from "@reearth/zushi";
+import { type PluginContext, Plugin, quickjs } from "@reearth/zushi";
 import { PluginView } from "@reearth/zushi/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { jsxSetup, jsxPluginSource } from "./jsxPluginSource";
 import { type ExampleHost, pluginSource } from "./pluginSource";
-import { quickjs } from "./quickjs";
+import { quickjsModule } from "./quickjs";
+
+// One backend factory, reused across the examples below. The module is a
+// singlefile QuickJS variant; each plugin still gets its own isolated context.
+const backend = quickjs({ module: quickjsModule });
 
 function useHostLog() {
   const [log, setLog] = useState<string[]>([]);
@@ -53,7 +57,7 @@ function ReactExample() {
       <h2>React · &lt;PluginView&gt;</h2>
       <PluginView
         code={pluginSource}
-        quickjs={quickjs}
+        backend={backend}
         autoResize="both"
         exposed={exposed}
         className="frame"
@@ -75,7 +79,7 @@ function VanillaExample() {
     if (!container) return;
     const plugin = new Plugin({
       code: pluginSource,
-      quickjs,
+      backend,
       surfaces: { ui: { container, autoResize: "both" } },
       exposed: ({ surfaces }) => ({
         ui: surfaces.ui.api,
@@ -123,7 +127,7 @@ function JsxExample() {
         setup={jsxSetup}
         intrinsics={false}
         code={jsxPluginSource}
-        quickjs={quickjs}
+        backend={backend}
         autoResize="both"
         exposed={exposed}
         className="frame"

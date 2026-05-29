@@ -1,25 +1,8 @@
-import { getQuickJS, type QuickJSWASMModule } from "quickjs-emscripten";
-import { Arena } from "quickjs-emscripten-sync";
-
-const AsyncFunction = (async () => {}).constructor;
-
-/**
- * Restricts which host values may cross into the QuickJS VM. Only plain
- * objects, arrays, primitives, plain functions, Date and Promise are allowed
- * by default; class instances are rejected so plugin code cannot walk a
- * prototype chain back to host internals.
- */
-export const defaultIsMarshalable = (obj: any): boolean => {
-  return (
-    ((typeof obj !== "object" || obj === null) && typeof obj !== "function") ||
-    Array.isArray(obj) ||
-    Object.getPrototypeOf(obj) === Function.prototype ||
-    Object.getPrototypeOf(obj) === Object.prototype ||
-    obj instanceof Date ||
-    obj instanceof Promise ||
-    obj instanceof AsyncFunction
-  );
-};
+import {
+  type Backend,
+  type BackendInput,
+  resolveBackend
+} from "./backend";
 
 export type MessageListener = (msg: any) => void;
 
@@ -46,24 +29,18 @@ export type SandboxOptions = {
   /** URL to fetch plugin source from. */
   src?: string;
   /**
-   * The QuickJS WASM module (or a promise for it). Defaults to `getQuickJS()`
-   * (the release-sync wasmfile variant). Provide a different variant for
-   * environments where a separate `.wasm` fetch is undesirable — e.g. a
-   * singlefile variant for bundlers/browsers.
+   * The execution backend (or a factory for one). Required — choose one
+   * explicitly, e.g. `quickjs()` for a QuickJS (WASM) VM. Backend-specific
+   * options (WASM module override, marshaling rules) live on the backend
+   * factory, e.g. `quickjs({ isMarshalable: "json" })`.
    */
-  quickjs?: QuickJSWASMModule | Promise<QuickJSWASMModule>;
-  /**
-   * Verdict for values the default rule rejects (class instances, …), OR'd with
-   * the default. A function is consulted per value; a static `true` (live
-   * proxy), `false` (not marshaled) or `"json"` (deep-copied snapshot) applies
-   * to all of them. Defaults to `"json"`.
-   */
-  isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
+  backend: BackendInput;
   /** API object (or factory) injected as globals into the VM. */
   exposed?: Exposed;
   /**
    * Trusted source evaluated in the VM *before* the plugin code. Used to
-   * install host-provided runtimes (e.g. the JSX layer) as VM globals.
+   * install host-provided runtimes (e.g. the JSX layer) as VM globals. Its
+   * language matches the backend's `language`.
    */
   bootstrap?: string;
   onError?: (err: any) => void;
@@ -77,14 +54,16 @@ const defaultOnError = (err: any) => {
 };
 
 /**
- * A QuickJS (WASM) VM that evaluates untrusted plugin code with a host-defined
- * API exposed into it. Framework-agnostic; it knows nothing about iframes or
- * any particular UI — those are supplied through `exposed`.
+ * Backend-agnostic host that evaluates untrusted plugin code with a
+ * host-defined API exposed into it. It owns source fetching, message fan-out,
+ * the event-loop scheduling and error handling, and drives the {@link Backend}
+ * supplied via options for everything VM-specific. Knows nothing about iframes
+ * or any particular UI — those are supplied through `exposed`.
  */
 export class Sandbox {
   private options: SandboxOptions;
   private onError: (err: any) => void;
-  private arenaRef: Arena | undefined;
+  private backendRef: Backend | undefined;
   private eventLoopTimer: number | undefined;
   private _loaded = false;
   private disposed = false;
@@ -101,8 +80,9 @@ export class Sandbox {
     return this._loaded;
   }
 
-  arena(): Arena | undefined {
-    return this.arenaRef;
+  /** The live backend, available after {@link start}. Advanced escape hatch. */
+  backend(): Backend | undefined {
+    return this.backendRef;
   }
 
   /**
@@ -125,34 +105,22 @@ export class Sandbox {
     this.messageOnceListeners.clear();
   }
 
-  /** Initialize the VM, expose the host API, and evaluate the plugin code. */
+  /** Initialize the backend, expose the host API, and evaluate the plugin code. */
   async start(): Promise<void> {
     if (this.disposed) return;
-    const { src, code: rawCode, exposed, isMarshalable } = this.options;
+    const { src, code: rawCode, exposed } = this.options;
     const code = rawCode ?? (src ? await (await fetch(src)).text() : "");
     if (!code || this.disposed) return;
 
     this.options.onPreInit?.();
 
-    const mod = this.options.quickjs
-      ? await this.options.quickjs
-      : await getQuickJS();
-    const ctx = mod.newContext();
+    const backend = resolveBackend(this.options.backend);
+    await backend.init();
     if (this.disposed) {
-      ctx.dispose();
+      backend.dispose();
       return;
     }
-
-    // Values the default rule rejects (class instances, …) fall back to this:
-    // a custom function, an explicit static verdict, or a "json" snapshot.
-    const fallback =
-      typeof isMarshalable === "function"
-        ? isMarshalable
-        : () => (isMarshalable === undefined ? "json" : isMarshalable);
-    this.arenaRef = new Arena(ctx, {
-      isMarshalable: (target) => defaultIsMarshalable(target) || fallback(target),
-      experimentalContextEx: true
-    });
+    this.backendRef = backend;
 
     const bridge: SandboxBridge = {
       messages: {
@@ -164,23 +132,21 @@ export class Sandbox {
     };
 
     const e = typeof exposed === "function" ? exposed(bridge) : exposed;
-    if (e) this.arenaRef.expose(e);
+    if (e) backend.expose(e);
 
     if (this.options.bootstrap) this.evalCode(this.options.bootstrap);
     this.evalCode(code);
     this._loaded = true;
   }
 
-  private evalCode(code: string): any {
-    if (!this.arenaRef) return;
-    let result: any;
+  private evalCode(code: string): void {
+    if (!this.backendRef) return;
     try {
-      result = this.arenaRef.evalCode(code);
+      this.backendRef.eval(code);
     } catch (err) {
       this.onError(err);
     }
     this.startEventLoop();
-    return result;
   }
 
   private startEventLoop(): void {
@@ -190,10 +156,9 @@ export class Sandbox {
   }
 
   private runEventLoop(): void {
-    if (!this.arenaRef) return;
+    if (!this.backendRef) return;
     try {
-      this.arenaRef.executePendingJobs();
-      if (this.arenaRef.context.runtime.hasPendingJob()) {
+      if (this.backendRef.pump()) {
         this.eventLoopTimer = (
           globalThis.setTimeout as Window["setTimeout"]
         )(() => this.runEventLoop(), 0);
@@ -213,15 +178,9 @@ export class Sandbox {
     if (typeof this.eventLoopTimer === "number") {
       clearTimeout(this.eventLoopTimer);
     }
-    if (this.arenaRef) {
-      try {
-        this.arenaRef.dispose();
-        this.arenaRef.context.dispose();
-      } catch (err) {
-        console.debug("zushi: quickjs dispose error", err);
-      } finally {
-        this.arenaRef = undefined;
-      }
+    if (this.backendRef) {
+      this.backendRef.dispose();
+      this.backendRef = undefined;
     }
   }
 }

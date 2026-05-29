@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { Sandbox } from "./runtime";
+import { Sandbox, quickjs } from "./runtime";
 
 /**
  * Sandbox-escape tests. These verify that untrusted plugin code running in the
@@ -10,6 +10,7 @@ describe("sandbox escape", () => {
   test("host globals (window/document/fetch/process) are unreachable", async () => {
     const out: Record<string, string> = {};
     const sandbox = new Sandbox({
+      backend: quickjs(),
       exposed: { report: (k: string, v: string) => (out[k] = v) },
       code: `
         report("window", typeof window);
@@ -33,6 +34,7 @@ describe("sandbox escape", () => {
   test("the Function constructor yields the VM global, not the host", async () => {
     const out: Record<string, any> = {};
     const sandbox = new Sandbox({
+      backend: quickjs(),
       exposed: {
         report: (k: string, v: any) => (out[k] = v),
         host: { ping: () => "pong" }
@@ -55,6 +57,7 @@ describe("sandbox escape", () => {
 
   test("prototype pollution inside the VM does not affect the host", async () => {
     const sandbox = new Sandbox({
+      backend: quickjs(),
       code: `
         Object.prototype.__pwned = "yes";
         Array.prototype.__pwned2 = "yes";
@@ -81,6 +84,7 @@ describe("sandbox escape", () => {
     const instance = new Secret();
     const out: Record<string, any> = {};
     const sandbox = new Sandbox({
+      backend: quickjs(),
       exposed: {
         getSecret: () => instance,
         report: (k: string, v: any) => (out[k] = v)
@@ -103,6 +107,7 @@ describe("sandbox escape", () => {
     const hostState = { value: 1 };
     const out: Record<string, any> = {};
     const sandbox = new Sandbox({
+      backend: quickjs(),
       exposed: {
         state: hostState,
         report: (k: string, v: any) => (out[k] = v)

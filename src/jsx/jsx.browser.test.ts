@@ -1,8 +1,10 @@
-import { Plugin } from "@reearth/zushi";
+import { Plugin, quickjs } from "@reearth/zushi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { jsxSetup, jsxPluginSource } from "../../examples/src/jsxPluginSource";
-import { quickjs } from "../../examples/src/quickjs";
+import { quickjsModule } from "../../examples/src/quickjs";
+
+const backend = quickjs({ module: quickjsModule });
 
 // Drives the opt-in JSX runtime end-to-end in a real browser: a component with
 // useState renders through the in-VM runtime into a real sandboxed iframe via
@@ -33,7 +35,7 @@ describe("jsx runtime (browser)", () => {
     plugin = new Plugin({
       jsx: true,
       surfaces: { ui: { container, autoResize: "both" } },
-      quickjs,
+      backend,
       exposed: () => ({ host: { clicked } }),
       code: `
         function App() {
@@ -85,7 +87,7 @@ describe("jsx runtime (browser)", () => {
       intrinsics: false, // plugin may only use registered components
       setup: jsxSetup,
       surfaces: { ui: { container, autoResize: "both" } },
-      quickjs,
+      backend,
       exposed: () => ({ host: { event } }),
       code: jsxPluginSource
     });

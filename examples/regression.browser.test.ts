@@ -1,8 +1,10 @@
-import { Plugin } from "@reearth/zushi";
+import { Plugin, quickjs } from "@reearth/zushi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { pluginSource } from "./src/pluginSource";
-import { quickjs } from "./src/quickjs";
+import { quickjsModule } from "./src/quickjs";
+
+const backend = quickjs({ module: quickjsModule });
 
 // Drives the example's real plugin end-to-end in a real browser: the plugin
 // runs in QuickJS, renders into a real sandboxed iframe, and exchanges real
@@ -30,7 +32,7 @@ describe("example plugin (regression)", () => {
 
     plugin = new Plugin({
       code: pluginSource,
-      quickjs,
+      backend,
       surfaces: { ui: { container, autoResize: "both" } },
       exposed: ({ surfaces }) => ({
         ui: surfaces.ui.api,

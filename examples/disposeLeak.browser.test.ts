@@ -1,4 +1,4 @@
-import { Plugin } from "@reearth/zushi";
+import { Plugin, quickjs } from "@reearth/zushi";
 import variant from "@jitl/quickjs-singlefile-browser-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -39,7 +39,7 @@ describe("dispose does not leak QuickJS handles", () => {
       lastAbort = false;
       const f = vi.fn();
       const plugin = new Plugin({
-        quickjs: newQuickJSWASMModuleFromVariant(variant),
+        backend: quickjs({ module: newQuickJSWASMModuleFromVariant(variant) }),
         surfaces: { ui: { container } },
         exposed: ({ surfaces }) => ({ ui: surfaces.ui.api, host: { f } }),
         code: `ui.on("message", (m) => { if (m && m.type === "ready") host.f(); });

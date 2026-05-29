@@ -1,7 +1,7 @@
 {
   "name": "@reearth/zushi",
   "version": "0.0.0",
-  "description": "A framework-agnostic plugin runtime: run untrusted JS in a QuickJS (WASM) VM, expose a host-defined API, and render plugin UI in sandboxed iframes.",
+  "description": "A framework-agnostic plugin runtime: run untrusted plugin code in an isolated WASM backend (QuickJS by default), expose a host-defined API, and render plugin UI in sandboxed iframes.",
   "license": "MIT",
   "repository": {
     "type": "git",

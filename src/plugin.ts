@@ -1,4 +1,9 @@
-import { Sandbox, type SandboxBridge, type SandboxOptions } from "./runtime";
+import {
+  Sandbox,
+  type SandboxBridge,
+  type BackendInput,
+  resolveBackend
+} from "./runtime";
 import { createConsole, UISurface } from "./ui";
 import type { AutoResize } from "./iframe";
 import { JsxHost, VM_RUNTIME_SOURCE, type IntrinsicsPolicy } from "./jsx";
@@ -77,10 +82,14 @@ export type PluginOptions = {
   intrinsics?: IntrinsicsPolicy;
   /** Builds the host-specific API merged into the exposed globals. */
   exposed?: (ctx: PluginContext) => Record<string, any>;
-  /** QuickJS WASM module/variant override (see {@link SandboxOptions.quickjs}). */
-  quickjs?: SandboxOptions["quickjs"];
-  /** See {@link SandboxOptions.isMarshalable}. */
-  isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
+  /**
+   * The execution backend (or a factory for one). Required — choose one
+   * explicitly, e.g. `quickjs()` for a QuickJS (WASM) VM. Backend-specific
+   * options (WASM module override, marshaling rules) live on the factory, e.g.
+   * `backend: quickjs({ isMarshalable: "json" })`. Note: {@link jsx} requires a
+   * JavaScript backend (`language === "js"`).
+   */
+  backend: BackendInput;
   onError?: (err: any) => void;
   onPreInit?: () => void;
   onDispose?: () => void;
@@ -89,7 +98,8 @@ export type PluginOptions = {
 
 /**
  * High-level orchestrator: creates the host-declared sandboxed UI surfaces,
- * wires them to a QuickJS VM, and exposes a default `{ console }` global merged
+ * wires them to the execution backend (QuickJS by default), and exposes a
+ * default `{ console }` global merged
  * with any host-provided API. Surfaces are handed to the host via the `exposed`
  * factory rather than auto-exposed.
  */
@@ -101,6 +111,13 @@ export class Plugin {
   private jsxHost?: JsxHost;
 
   constructor(options: PluginOptions) {
+    const backend = resolveBackend(options.backend);
+    if (options.jsx && backend.language !== "js") {
+      throw new Error(
+        `zushi: the jsx runtime requires a JavaScript backend, but "${backend.name}" is "${backend.language}"`
+      );
+    }
+
     const startEventLoop = () => this.sandbox?.requestEventLoop();
 
     const configs = options.surfaces ?? {};
@@ -133,8 +150,7 @@ export class Plugin {
     this.sandbox = new Sandbox({
       code: options.code,
       src: options.src,
-      quickjs: options.quickjs,
-      isMarshalable: options.isMarshalable,
+      backend,
       bootstrap,
       onError: options.onError,
       onPreInit: options.onPreInit,

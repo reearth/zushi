@@ -1,7 +1,8 @@
 # zushi
 
-A framework-agnostic plugin runtime for the browser. Run untrusted JavaScript in
-a [QuickJS](https://github.com/justjake/quickjs-emscripten) (WASM) VM, expose a
+A framework-agnostic plugin runtime for the browser. Run untrusted plugin code
+in an isolated WASM **backend** — [QuickJS](https://github.com/justjake/quickjs-emscripten)
+for JavaScript by default, with room for other guest languages — expose a
 host-defined API into it, and render plugin UI inside sandboxed `<iframe>`s.
 
 > The name comes from _zushi_ (厨子), a small Japanese cabinet that enshrines a precious object behind doors you open only when needed — much like a host that encloses an external module and opens it to render on demand.
@@ -11,16 +12,18 @@ host-defined API into it, and render plugin UI inside sandboxed `<iframe>`s.
 Running third-party plugin code safely in a web app needs two layers of
 isolation:
 
-1. **A JavaScript VM** ([QuickJS](https://github.com/justjake/quickjs-emscripten)
-   via [`quickjs-emscripten-sync`](https://github.com/reearth/quickjs-emscripten-sync))
-   so plugin logic never touches the host realm — no `window`, no `document`,
-   no `fetch`, unless the host explicitly hands it over.
+1. **A language VM** behind a pluggable `Backend`. The default is
+   [QuickJS](https://github.com/justjake/quickjs-emscripten) (via
+   [`quickjs-emscripten-sync`](https://github.com/reearth/quickjs-emscripten-sync))
+   for JavaScript, so plugin logic never touches the host realm — no `window`,
+   no `document`, no `fetch`, unless the host explicitly hands it over. Other
+   WASM runtimes (e.g. a Python VM) can implement the same `Backend` interface.
 2. **Sandboxed iframes** (`sandbox="allow-scripts ..."`, no `allow-same-origin`)
    so plugin UI is rendered in an opaque origin and talks to the host only via
    `postMessage`.
 
 zushi packages both layers plus the wiring between them, and lets you expose any
-host API you like into the VM.
+host API you like into the backend.
 
 ## Install
 
@@ -31,9 +34,12 @@ npm install @reearth/zushi
 ## Quick start
 
 ```ts
-import { Plugin } from "@reearth/zushi";
+import { Plugin, quickjs } from "@reearth/zushi";
 
 const plugin = new Plugin({
+  // Choose the execution backend explicitly. `quickjs()` runs plugin code in a
+  // QuickJS (WASM) JavaScript VM.
+  backend: quickjs(),
   // Declare the UI surfaces you want. None are created by default; each gets a
   // sandboxed iframe. Omit `container` for off-screen surfaces (e.g. a modal).
   surfaces: {
@@ -66,19 +72,45 @@ await plugin.start();
 plugin.dispose();
 ```
 
-### Choosing a QuickJS variant (browsers/bundlers)
+### Backends
+
+Plugin code runs inside a pluggable **backend**, which you choose explicitly
+via the required `backend` option. `quickjs()` runs JavaScript in a QuickJS
+(WASM) VM; in the future, another guest runtime (e.g. a Python WASM VM) can
+implement the same `Backend` interface and be dropped in here.
+
+QuickJS-specific options (the WASM module/variant, marshaling rules) live on
+the `quickjs()` factory rather than on `Plugin` directly:
+
+```ts
+import { Plugin, quickjs } from "@reearth/zushi";
+
+const plugin = new Plugin({
+  surfaces,
+  code,
+  backend: quickjs({ isMarshalable: "json" })
+});
+```
+
+#### Choosing a QuickJS variant (browsers/bundlers)
 
 By default the VM loads via `getQuickJS()`, which fetches a separate `.wasm`
 file. In a bundler/browser it's often easier to use a **singlefile** variant
-that embeds the wasm, avoiding a separate fetch:
+that embeds the wasm, avoiding a separate fetch — pass it as the backend's
+`module`:
 
 ```ts
+import { Plugin, quickjs } from "@reearth/zushi";
 import variant from "@jitl/quickjs-singlefile-browser-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten";
 
-const quickjs = newQuickJSWASMModuleFromVariant(variant);
+const module = newQuickJSWASMModuleFromVariant(variant);
 
-const plugin = new Plugin({ surfaces, code, quickjs }); // pass it through
+const plugin = new Plugin({
+  surfaces,
+  code,
+  backend: quickjs({ module })
+});
 ```
 
 ### React
@@ -88,10 +120,12 @@ via the `surface` prop; declare extra off-screen surfaces via `surfaces`).
 
 ```tsx
 import { PluginView } from "@reearth/zushi/react";
+import { quickjs } from "@reearth/zushi";
 
 function MyPlugin() {
   return (
     <PluginView
+      backend={quickjs()}
       code={pluginSource}
       style={{ width: 320, height: 240 }}
       exposed={({ surfaces }) => ({ reearth: { ui: surfaces.ui.api } })}
@@ -104,9 +138,13 @@ Or use the hook directly:
 
 ```tsx
 import { usePlugin } from "@reearth/zushi/react";
+import { quickjs } from "@reearth/zushi";
 
 function MyPlugin() {
-  const { containerRef, getPlugin } = usePlugin({ code: pluginSource });
+  const { containerRef, getPlugin } = usePlugin({
+    backend: quickjs(),
+    code: pluginSource
+  });
   return <div ref={containerRef} />;
 }
 ```
@@ -119,6 +157,7 @@ declaratively with a small React-like runtime that runs **inside the VM**. Pass
 
 ```ts
 const plugin = new Plugin({
+  backend: quickjs(),
   jsx: true,
   surfaces: { ui: { container } },
   code: `
@@ -176,6 +215,7 @@ component vocabulary:
 
 ```ts
 new Plugin({
+  backend: quickjs(),
   jsx: true,
   surfaces: { ui: { container } },
   intrinsics: false, // plugins may not use raw HTML tags…
@@ -228,7 +268,7 @@ subset, not full compatibility.
 
 ```
 untrusted plugin code
-  └─ QuickJS WASM VM            (Sandbox)        — runtime/
+  └─ Backend (QuickJS by default) (Sandbox)       — runtime/
        └─ exposed host API      (merge)          — ui/ + your API
             └─ sandboxed iframe (SafeIFrame)     — iframe/
                  └─ postMessage  ←→  host
@@ -236,7 +276,7 @@ untrusted plugin code
 
 | Module      | Export                          | Responsibility                                            |
 | ----------- | ------------------------------- | --------------------------------------------------------- |
-| `runtime/`  | `Sandbox`                       | QuickJS VM lifecycle, expose, eval, job loop, dispose     |
+| `runtime/`  | `Sandbox`, `Backend`, `quickjs` | Backend-agnostic lifecycle/messages/job loop; `QuickJSBackend` does VM expose/eval/pump |
 | `iframe/`   | `SafeIFrame`                    | Sandboxed iframe, srcdoc injection, auto-resize, messages |
 | `ui/`       | `UISurface`, `createConsole`    | Named UI surface API (`.api`) built on `SafeIFrame`       |
 | `events/`   | `events`, `mergeEvents`         | Typed event emitter (QuickJS-marshal-stable via fingerprint) |

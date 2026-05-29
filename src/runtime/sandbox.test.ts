@@ -1,11 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { Sandbox, defaultIsMarshalable } from "./sandbox";
+import { Sandbox } from "./sandbox";
+import { quickjs, QuickJSBackend } from "./quickjs";
 
 describe("Sandbox", () => {
   test("exposes a host API and evaluates plugin code", async () => {
     const calls: any[] = [];
     const sandbox = new Sandbox({
+      backend: quickjs(),
       code: `host.report(1 + 2); host.report("hello");`,
       exposed: { host: { report: (v: any) => calls.push(v) } }
     });
@@ -18,6 +20,7 @@ describe("Sandbox", () => {
   test("runs the async job loop so promises resolve", async () => {
     const results: any[] = [];
     const sandbox = new Sandbox({
+      backend: quickjs(),
       exposed: {
         host: {
           resolveValue: () => Promise.resolve(42),
@@ -40,6 +43,7 @@ describe("Sandbox", () => {
   test("delivers messages to plugin listeners via the bridge", async () => {
     const received: any[] = [];
     const sandbox = new Sandbox({
+      backend: quickjs(),
       exposed: (bridge) => ({
         host: {
           onMessage: (cb: (m: any) => void) => bridge.messages.on(cb),
@@ -57,60 +61,19 @@ describe("Sandbox", () => {
 
   test("onMessage option is invoked for every message", async () => {
     const onMessage = vi.fn();
-    const sandbox = new Sandbox({ code: `1;`, onMessage });
+    const sandbox = new Sandbox({ backend: quickjs(), code: `1;`, onMessage });
     await sandbox.start();
     sandbox.handleMessage({ a: 1 });
     expect(onMessage).toHaveBeenCalledWith({ a: 1 });
     sandbox.dispose();
   });
 
-  test("dispose tears down the VM and stops accepting work", async () => {
-    const sandbox = new Sandbox({ code: `1;` });
+  test("dispose tears down the backend and stops accepting work", async () => {
+    const sandbox = new Sandbox({ backend: quickjs(), code: `1;` });
     await sandbox.start();
-    expect(sandbox.arena()).toBeDefined();
+    expect(sandbox.backend()).toBeInstanceOf(QuickJSBackend);
     sandbox.dispose();
-    expect(sandbox.arena()).toBeUndefined();
+    expect(sandbox.backend()).toBeUndefined();
     expect(sandbox.loaded).toBe(false);
-  });
-
-  test('default "json" snapshots values the default rule rejects', async () => {
-    class Foo {
-      x = 1;
-    }
-    const seen: any[] = [];
-    const sandbox = new Sandbox({
-      exposed: { host: { foo: new Foo(), report: (v: any) => seen.push(v) } },
-      code: `host.report(host.foo && host.foo.x);`
-    });
-    await sandbox.start();
-    expect(seen).toEqual([1]);
-    sandbox.dispose();
-  });
-
-  test("isMarshalable: false leaves those values unmarshaled", async () => {
-    class Foo {
-      x = 1;
-    }
-    const seen: any[] = [];
-    const sandbox = new Sandbox({
-      isMarshalable: false,
-      exposed: { host: { foo: new Foo(), report: (v: any) => seen.push(v) } },
-      code: `host.report(typeof host.foo);`
-    });
-    await sandbox.start();
-    expect(seen).toEqual(["undefined"]);
-    sandbox.dispose();
-  });
-
-  test("defaultIsMarshalable rejects class instances", () => {
-    class Foo {
-      x = 1;
-    }
-    expect(defaultIsMarshalable(new Foo())).toBe(false);
-    expect(defaultIsMarshalable({ a: 1 })).toBe(true);
-    expect(defaultIsMarshalable([1, 2])).toBe(true);
-    expect(defaultIsMarshalable(42)).toBe(true);
-    expect(defaultIsMarshalable(() => {})).toBe(true);
-    expect(defaultIsMarshalable(new Date())).toBe(true);
   });
 });
