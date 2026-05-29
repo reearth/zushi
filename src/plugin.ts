@@ -61,6 +61,14 @@ export type PluginOptions = {
    */
   setup?: string;
   /**
+   * Whether `registerComponent` stays reachable from plugin code. Off by
+   * default: the global is removed once {@link setup} has run, so only the
+   * trusted setup slot can register components (and thereby grant the
+   * intrinsic-tag privilege). Set `true` to keep it exposed to plugin code.
+   * Requires {@link jsx}.
+   */
+  exposeRegisterComponent?: boolean;
+  /**
    * Gates plugin-authored intrinsic (HTML) tags: `true` (default, any), `false`
    * (none — plugins must use registered components), or an allowlist of tags.
    * Tags emitted inside registered components are always allowed. Requires
@@ -71,6 +79,7 @@ export type PluginOptions = {
   exposed?: (ctx: PluginContext) => Record<string, any>;
   /** QuickJS WASM module/variant override (see {@link SandboxOptions.quickjs}). */
   quickjs?: SandboxOptions["quickjs"];
+  /** See {@link SandboxOptions.isMarshalable}. */
   isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
   onError?: (err: any) => void;
   onPreInit?: () => void;
@@ -114,7 +123,11 @@ export class Plugin {
     }
 
     const bootstrap = options.jsx
-      ? VM_RUNTIME_SOURCE + (options.setup ? "\n;" + options.setup : "")
+      ? VM_RUNTIME_SOURCE +
+        (options.setup ? "\n;" + options.setup : "") +
+        (options.exposeRegisterComponent
+          ? ""
+          : "\n;delete globalThis.registerComponent;")
       : undefined;
 
     this.sandbox = new Sandbox({

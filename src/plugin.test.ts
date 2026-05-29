@@ -87,6 +87,35 @@ describe("Plugin", () => {
     expect(document.body.querySelectorAll("div").length).toBe(before);
   });
 
+  test("seals registerComponent from plugin code by default", async () => {
+    const seen: string[] = [];
+    const plugin = new Plugin({
+      jsx: true,
+      surfaces: { ui: { container } },
+      setup: `registerComponent("View", (p) => h("div", null, p.children));`,
+      exposed: () => ({ probe: (t: string) => seen.push(t) }),
+      // registerComponent is gone for plugin code, but the registered global stays
+      code: `probe(typeof registerComponent); probe(typeof View);`
+    });
+    await plugin.start();
+    expect(seen).toEqual(["undefined", "function"]);
+    plugin.dispose();
+  });
+
+  test("exposeRegisterComponent keeps it reachable from plugin code", async () => {
+    const seen: string[] = [];
+    const plugin = new Plugin({
+      jsx: true,
+      exposeRegisterComponent: true,
+      surfaces: { ui: { container } },
+      exposed: () => ({ probe: (t: string) => seen.push(t) }),
+      code: `probe(typeof registerComponent);`
+    });
+    await plugin.start();
+    expect(seen).toEqual(["function"]);
+    plugin.dispose();
+  });
+
   test("creates no surfaces by default", async () => {
     const plugin = new Plugin({ code: `1;` });
     await plugin.start();

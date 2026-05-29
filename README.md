@@ -195,15 +195,20 @@ of tag names. Tags emitted *inside* a registered component are always allowed.
 #### The `setup` slot
 
 `setup` is a trusted JS source evaluated in the VM **after** the JSX runtime and
-**before** the plugin. Its only privilege over plugin code is *timing*:
-components registered here via `registerComponent` are marked trusted, so the
-markup they emit may use intrinsic tags even when `intrinsics` forbids them in
-plugin code. (Anything `setup` can call, plugin code can call too — the boundary
-is "registered before the plugin", not a separate API surface.)
+**before** the plugin. Components registered here via `registerComponent` are
+marked trusted, so the markup they emit may use intrinsic tags even when
+`intrinsics` forbids them in plugin code.
 
-The full JSX runtime is in scope inside `setup`:
+`registerComponent` is removed from the global scope once `setup` has run, so
+plugin code can't register (and so can't grant itself the intrinsic-tag
+privilege) — only `setup` can. Registered components remain available as globals
+by name. Set `exposeRegisterComponent: true` to keep the registrar reachable
+from plugin code.
 
-- `registerComponent`
+The full JSX runtime is in scope inside `setup` (and, except for
+`registerComponent`, in plugin code too):
+
+- `registerComponent` (setup only by default)
 - `h` / `createElement`, `Fragment`, `render`
 - hooks — `useState`, `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`,
   `useCallback`, `useRef`, `useId`, `createContext`, `useContext`
