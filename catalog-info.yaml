@@ -1,0 +1,24 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: zushi
+  namespace: reearth
+  description: 'A framework-agnostic browser plugin runtime: run untrusted code in
+    an isolated WASM backend (QuickJS built in), expose a host-defined API, and render
+    UI in sandboxed iframes'
+  annotations:
+    github.com/project-slug: reearth/zushi
+  links:
+  - url: https://github.com/reearth/zushi
+    title: GitHub
+    icon: github
+  tags:
+  - typescript
+  - browser
+  - iframe
+  - plugin-system
+  - quickjs
+spec:
+  type: service
+  lifecycle: experimental
+  owner: reearth/cto-office
