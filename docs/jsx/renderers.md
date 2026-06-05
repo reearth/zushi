@@ -53,8 +53,8 @@ new Plugin({
   intrinsics: ["Stage", "Layer", "Rect"], // the renderer's tag vocabulary
   surfaces: { ui: { container } },
   code: `
-    const { useState, h, render } = zushi;
-    render(h("Stage", { width: 320, height: 220 },
+    const { useState, h, ui } = zushi;
+    ui.render(h("Stage", { width: 320, height: 220 },
       h("Layer", null, h("Rect", { x: 20, y: 20, width: 80, height: 60, fill: "tomato" }))));
   `
 });

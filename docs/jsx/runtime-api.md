@@ -25,18 +25,32 @@ h("div", { className: "row" }, h("span", null, "hi"))
 Groups children without a wrapper element. It's the literal string
 `"__zushi.Fragment"` (so it survives marshaling/bundling), used as a `type`.
 
-### `render(element, options?)`
+## Surfaces
 
-Mount an element tree into a surface and start reconciling it.
+### `surface(name?)`
+
+Look up a surface handle by name; with no argument it returns the host's default
+surface (`"ui"` when declared, else the only one). Throws on an unknown name.
+Each declared surface is also exposed directly by name — `zushi.ui`,
+`zushi.modal`, … — so `surface()` is mostly for dynamic lookup.
+
+### Surface handles — `ui.render`, `ui.resize`, `ui.show`, `ui.hide`
 
 ```ts
-render(element, {
-  surface?: string,           // target surface (default "ui" / the only one)
+ui.render(element, {
   visible?: boolean,
   width?: number | string,
   height?: number | string
 })
+ui.resize(width?, height?)
+ui.show()
+ui.hide()
 ```
+
+`render` mounts an element tree into the surface and starts reconciling it.
+`resize` / `show` / `hide` drive the mounted surface afterwards (with a
+host-direct [renderer](./renderers.md), visibility is the host's call and only
+`resize` is honored).
 
 ## State
 
@@ -108,7 +122,7 @@ its own state hasn't changed). `areEqual(prev, next)` overrides the comparison.
 
 ```ts
 const Ctx = createContext(defaultValue);
-render(h(Ctx.Provider, { value }, children));
+ui.render(h(Ctx.Provider, { value }, children));
 const value = useContext(Ctx); // nearest enclosing Provider value, else default
 ```
 
@@ -130,8 +144,18 @@ or `(error) => node`) instead; `onError(error)` is called when it catches.
 Shows `fallback` while a child throws a thenable, then re-renders when it
 settles. There is no `lazy()` — the VM has no module loader.
 
+### `components`
+
+The record of trusted components the host registered, keyed by name —
+destructure what you need, Figma-style:
+
+```ts
+const { View, Text } = zushi.components;
+ui.render(h(View, null, h(Text, null, "hi")));
+```
+
 ### `registerComponent(name, fn)`
 
-Registers a trusted custom component (exposed as a bare global by name). Sealed
-from plugin code by default — only the trusted `setup` slot can call it. See
+Registers a trusted custom component into the `components` record. Sealed from
+plugin code by default — only the trusted `setup` slot can call it. See
 [Components & intrinsics](./components.md).

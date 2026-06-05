@@ -41,6 +41,8 @@ export const ROOT_ID = "__zushi_root";
  *
  * `registerComponent` is intentionally listed but sealed from plugin code by
  * default (only the trusted `setup` slot reaches it via the runtime bundle).
+ * `surface` is the surface-handle accessor (`surface("ui").render(...)`);
+ * `components` is the live record of registered trusted components.
  *
  * Must match the keys the in-VM runtime installs into its bundle
  * (see {@link ./vmRuntime}).
@@ -68,7 +70,8 @@ export const RUNTIME_API_NAMES = [
   "memo",
   "ErrorBoundary",
   "Suspense",
-  "render"
+  "surface",
+  "components"
 ] as const;
 
 export type RuntimeApiName = (typeof RUNTIME_API_NAMES)[number];

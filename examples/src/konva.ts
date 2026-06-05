@@ -30,7 +30,7 @@ export const konvaRenderer = hostReactRenderer({
 // renderer maps to react-konva components. Hooks come from the `zushi`
 // namespace; the tag vocabulary is gated by the host's `intrinsics` allowlist.
 export const konvaPluginSource = `
-  const { useState, h, render } = zushi;
+  const { useState, h, ui } = zushi;
 
   function App() {
     const [boxes, setBoxes] = useState([]);
@@ -62,5 +62,5 @@ export const konvaPluginSource = `
     );
   }
 
-  render(h(App));
+  ui.render(h(App));
 `;

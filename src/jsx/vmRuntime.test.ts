@@ -27,9 +27,11 @@ function harness(
     namespace?: any;
     placements?: any[];
     exposeRegisterComponent?: boolean;
+    surfaces?: string[];
   } = {}
 ) {
   const renders: (RenderPayload & { surface: string })[] = [];
+  const updates: { surface: string; options: any }[] = [];
   const errors: any[] = [];
   let dispatch: Dispatch | undefined;
 
@@ -43,12 +45,16 @@ function harness(
       __zushi: {
         config: {
           intrinsics: opts.intrinsics ?? true,
+          surfaces: opts.surfaces ?? ["ui", "modal"],
+          defaultSurface: "ui",
           namespace: opts.namespace ?? false,
           placements: opts.placements ?? [],
           exposeRegisterComponent: opts.exposeRegisterComponent ?? true
         },
         render: (surface: string, payload: RenderPayload) =>
           renders.push({ ...payload, surface }),
+        update: (surface: string, options: any) =>
+          updates.push({ surface, options }),
         ready: (fn: Dispatch) => {
           dispatch = fn;
         }
@@ -63,6 +69,7 @@ function harness(
   return {
     sandbox,
     renders,
+    updates,
     errors,
     last,
     rawDispatch(
@@ -87,7 +94,7 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
 
 describe("vm jsx runtime", () => {
   test("renders intrinsic elements to a serialized tree", async () => {
-    const h = harness(`render(createElement("div", { id: "a" }, "hello"));`);
+    const h = harness(`ui.render(createElement("div", { id: "a" }, "hello"));`);
     await h.sandbox.start();
 
     expect(h.renders).toHaveLength(1);
@@ -99,7 +106,7 @@ describe("vm jsx runtime", () => {
 
   test("flattens fragments and skips null children", async () => {
     const h = harness(`
-      render(createElement(Fragment, null,
+      ui.render(createElement(Fragment, null,
         createElement("span", null, "a"),
         false,
         createElement("span", null, "b")
@@ -120,7 +127,7 @@ describe("vm jsx runtime", () => {
         const [n, setN] = useState(0);
         return createElement("button", { onClick: () => setN(n + 1) }, "count:" + n);
       }
-      render(createElement(Counter, null));
+      ui.render(createElement(Counter, null));
     `);
     await h.sandbox.start();
 
@@ -143,7 +150,7 @@ describe("vm jsx runtime", () => {
         const [v, setV] = useState("");
         return createElement("input", { value: v, onInput: (e) => setV(e.value) });
       }
-      render(createElement(Input, null));
+      ui.render(createElement(Input, null));
     `);
     await h.sandbox.start();
 
@@ -162,7 +169,7 @@ describe("vm jsx runtime", () => {
         const [n, setN] = useState(0);
         return createElement("button", { onClick: () => setN(n + 1) }, "n:" + n);
       }
-      render(createElement(C, null));
+      ui.render(createElement(C, null));
     `);
     await h.sandbox.start();
 
@@ -186,7 +193,7 @@ describe("vm jsx runtime", () => {
 
   test("stamps keys on serialized nodes for the keyed diff", async () => {
     const h = harness(`
-      render(createElement("ul", null,
+      ui.render(createElement("ul", null,
         createElement("li", { key: "a" }, "A"),
         createElement("li", { key: "b" }, "B")
       ));
@@ -198,8 +205,8 @@ describe("vm jsx runtime", () => {
     h.sandbox.dispose();
   });
 
-  test("renders to a non-default surface", async () => {
-    const h = harness(`render(createElement("div", null, "modal"), { surface: "modal" });`);
+  test("renders to a non-default surface via its handle", async () => {
+    const h = harness(`modal.render(createElement("div", null, "modal"));`);
     await h.sandbox.start();
 
     expect(h.renders).toHaveLength(1);
@@ -207,10 +214,48 @@ describe("vm jsx runtime", () => {
     h.sandbox.dispose();
   });
 
+  test("surface() resolves handles and rejects unknown names", async () => {
+    const h = harness(`
+      ui.render(createElement("div", null,
+        surface().id,             // default surface
+        ":",
+        surface("modal").id       // by name
+      ));
+      try {
+        surface("nope");
+      } catch (e) {
+        console.error(String(e));
+      }
+    `);
+    await h.sandbox.start();
+
+    const root = h.renders[0].tree[0] as any;
+    expect(root.c.map((n: any) => n.x).join("")).toBe("ui:modal");
+    expect(String(h.errors[0])).toContain('unknown surface "nope"');
+    h.sandbox.dispose();
+  });
+
+  test("surface handles forward resize/show/hide to the host", async () => {
+    const h = harness(`
+      ui.resize(320, 480);
+      ui.hide();
+      surface("modal").show();
+    `);
+    await h.sandbox.start();
+
+    expect(h.updates).toEqual([
+      { surface: "ui", options: { width: 320, height: 480 } },
+      { surface: "ui", options: { visible: false } },
+      { surface: "modal", options: { visible: true } }
+    ]);
+    h.sandbox.dispose();
+  });
+
   test("registered components render and may emit intrinsics under intrinsics:false", async () => {
     const h = harness(
       `
-        render(
+        const { View, Text } = components;
+        ui.render(
           h(View, { spacing: 8 },
             h(Text, null, "hi"))
         );
@@ -234,13 +279,33 @@ describe("vm jsx runtime", () => {
     h.sandbox.dispose();
   });
 
+  test("registered components land in the components record, not as globals", async () => {
+    const h = harness(
+      `
+        ui.render(createElement("div", null,
+          typeof View,                                   // no bare global
+          ":",
+          String(typeof components.View === "function")  // but in the record
+        ));
+      `,
+      {
+        setup: `registerComponent("View", (p) => h("div", null, p.children));`
+      }
+    );
+    await h.sandbox.start();
+
+    const root = h.renders[0].tree[0] as any;
+    expect(root.c.map((n: any) => n.x).join("")).toBe("undefined:true");
+    h.sandbox.dispose();
+  });
+
   test("useReducer dispatches and re-renders", async () => {
     const h = harness(`
       function C() {
         const [n, dispatch] = useReducer((s, a) => (a === "inc" ? s + 1 : s), 0);
         return createElement("button", { onClick: () => dispatch("inc") }, "n:" + n);
       }
-      render(createElement(C, null));
+      ui.render(createElement(C, null));
     `);
     await h.sandbox.start();
     expect((h.renders[0].tree[0] as any).c[0].x).toBe("n:0");
@@ -257,7 +322,7 @@ describe("vm jsx runtime", () => {
       function Child() {
         return createElement("span", null, useContext(Ctx));
       }
-      render(createElement("div", null,
+      ui.render(createElement("div", null,
         createElement(Ctx.Provider, { value: "hello" }, createElement(Child, null)),
         createElement(Child, null)
       ));
@@ -276,7 +341,7 @@ describe("vm jsx runtime", () => {
         const id = useId();
         return createElement("label", { htmlFor: id }, id);
       }
-      render(createElement("div", null,
+      ui.render(createElement("div", null,
         createElement(Field, null),
         createElement(Field, null)
       ));
@@ -296,7 +361,7 @@ describe("vm jsx runtime", () => {
     const h = harness(`
       function Boom() { throw new Error("kaboom"); }
       function Ok() { return createElement("span", null, "ok"); }
-      render(createElement("div", null,
+      ui.render(createElement("div", null,
         createElement(ErrorBoundary, { fallback: createElement("span", null, "caught") },
           createElement(Boom, null)),
         createElement(Ok, null)
@@ -313,7 +378,7 @@ describe("vm jsx runtime", () => {
   test("ErrorBoundary fallback can be a function of the error", async () => {
     const h = harness(`
       function Boom() { throw new Error("nope"); }
-      render(createElement(ErrorBoundary,
+      ui.render(createElement(ErrorBoundary,
         { fallback: (e) => createElement("span", null, "err:" + e.message) },
         createElement(Boom, null)));
     `);
@@ -337,7 +402,7 @@ describe("vm jsx runtime", () => {
             createElement(Child, { label: "fixed" })
           );
         }
-        render(createElement(App, null));
+        ui.render(createElement(App, null));
       `,
       { exposed: { host: { rendered: () => { childRenders++; } } } }
     );
@@ -367,7 +432,7 @@ describe("vm jsx runtime", () => {
           if (!done) throw host.ready;
           return createElement("span", null, value);
         }
-        render(createElement(Suspense,
+        ui.render(createElement(Suspense,
           { fallback: createElement("span", null, "loading") },
           createElement(Async, null)));
       `,
@@ -386,7 +451,7 @@ describe("vm jsx runtime", () => {
   });
 
   test("intrinsics:false rejects raw HTML authored in plugin code", async () => {
-    const h = harness(`render(createElement("div", null, "nope"));`, {
+    const h = harness(`ui.render(createElement("div", null, "nope"));`, {
       intrinsics: false
     });
     await h.sandbox.start();

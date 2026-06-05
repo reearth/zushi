@@ -30,7 +30,7 @@ export type UISurfaceOptions = {
 /** The method surface a host typically exposes to plugins for a UI surface. */
 export type SurfaceAPI = Pick<
   UISurface,
-  "show" | "postMessage" | "resize" | "update" | "close" | "on" | "off"
+  "show" | "postMessage" | "resize" | "setVisible" | "update" | "close" | "on" | "off"
 >;
 
 /**
@@ -85,6 +85,11 @@ export class UISurface {
     this.frame.resize(width, height);
   };
 
+  /** Show or hide the surface without re-rendering its content. */
+  setVisible = (visible: boolean): void => {
+    this.frame.setVisible(visible);
+  };
+
   postMessage = (message: any): void => {
     this.frame.postMessage(message);
   };
@@ -115,7 +120,7 @@ export class UISurface {
 
   /** The method surface a host typically exposes to plugins. */
   get api(): SurfaceAPI {
-    const { show, postMessage, resize, update, close, on, off } = this;
-    return { show, postMessage, resize, update, close, on, off };
+    const { show, postMessage, resize, setVisible, update, close, on, off } = this;
+    return { show, postMessage, resize, setVisible, update, close, on, off };
   }
 }

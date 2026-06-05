@@ -99,12 +99,17 @@ describe("Plugin", () => {
       surfaces: { ui: { container } },
       setup: `registerComponent("View", (p) => h("div", null, p.children));`,
       exposed: () => ({ probe: (t: string) => seen.push(t) }),
-      // registerComponent is not in the default `zushi` namespace, but a
-      // component registered by the trusted setup stays available (bare).
-      code: `probe(typeof zushi.registerComponent); probe(typeof View);`
+      // registerComponent is not in the default `zushi` namespace; components
+      // registered by the trusted setup are picked up from `zushi.components`
+      // (not planted as bare globals).
+      code: `
+        probe(typeof zushi.registerComponent);
+        probe(typeof View);
+        probe(typeof zushi.components.View);
+      `
     });
     await plugin.start();
-    expect(seen).toEqual(["undefined", "function"]);
+    expect(seen).toEqual(["undefined", "undefined", "function"]);
     plugin.dispose();
   });
 
@@ -132,7 +137,8 @@ describe("Plugin", () => {
       exposed: () => ({ probe: (k: string, t: string) => (seen[k] = t) }),
       code: `
         probe("nsUseState", typeof zushi.useState);
-        probe("nsRender", typeof zushi.render);
+        probe("nsSurface", typeof zushi.surface);
+        probe("nsUiRender", typeof zushi.ui.render);  // per-surface handle
         probe("bareUseState", typeof useState);   // not bare by default
         probe("bridge", typeof __zushi);           // sealed after setup
       `
@@ -140,7 +146,8 @@ describe("Plugin", () => {
     await plugin.start();
     expect(seen).toEqual({
       nsUseState: "function",
-      nsRender: "function",
+      nsSurface: "function",
+      nsUiRender: "function",
       bareUseState: "undefined",
       bridge: "undefined"
     });
@@ -157,14 +164,14 @@ describe("Plugin", () => {
       exposed: () => ({ probe: (k: string, t: string) => (seen[k] = t) }),
       code: `
         probe("useState", typeof useState);
-        probe("render", typeof render);
+        probe("uiRender", typeof ui.render);  // surface handle as a bare global
         probe("zushi", typeof zushi);   // no namespace object created
       `
     });
     await plugin.start();
     expect(seen).toEqual({
       useState: "function",
-      render: "function",
+      uiRender: "function",
       zushi: "undefined"
     });
     plugin.dispose();
@@ -178,18 +185,20 @@ describe("Plugin", () => {
       surfaces: { ui: { container } },
       exposed: ({ runtime }) => ({
         probe: (k: string, t: string) => (seen[k] = t),
-        reearth: { useState: runtime.useState, render: runtime.render }
+        reearth: { useState: runtime.useState, surface: runtime.surface }
       }),
       code: `
         probe("reearthUseState", typeof reearth.useState);
-        probe("reearthRender", typeof reearth.render);
+        probe("reearthSurface", typeof reearth.surface);
+        probe("reearthUiRender", typeof reearth.surface("ui").render);
         probe("zushi", typeof zushi);   // default placement suppressed
       `
     });
     await plugin.start();
     expect(seen).toEqual({
       reearthUseState: "function",
-      reearthRender: "function",
+      reearthSurface: "function",
+      reearthUiRender: "function",
       zushi: "undefined"
     });
     plugin.dispose();
@@ -222,8 +231,8 @@ describe("Plugin", () => {
           "<!--CUSTOM_RENDERER--></body></html>"
       },
       code: `
-        const { h, render } = zushi;
-        render(h("div", null, "hi"));
+        const { h, ui } = zushi;
+        ui.render(h("div", null, "hi"));
       `
     });
     await plugin.start();
@@ -261,8 +270,8 @@ describe("Plugin", () => {
       surfaces: { ui: { container } },
       exposed: () => ({ host: { clicked: () => clicked.push(1) } }),
       code: `
-        const { h, render } = zushi;
-        render(h("rect", { onClick: () => host.clicked() }));
+        const { h, ui } = zushi;
+        ui.render(h("rect", { onClick: () => host.clicked() }));
       `
     });
     await plugin.start();
@@ -308,12 +317,12 @@ describe("Plugin", () => {
       surfaces: { ui: { container } },
       synced: { initial: { count: 1 } },
       code: `
-        const { useSyncedState, h, render } = zushi;
+        const { useSyncedState, h, ui } = zushi;
         function App() {
           const [n, setN] = useSyncedState("count", 0);
           return h("button", { onClick: () => setN(n + 1) }, "n=" + n);
         }
-        render(h(App));
+        ui.render(h(App));
       `
     });
     await plugin.start();
@@ -361,12 +370,12 @@ describe("Plugin", () => {
       renderer: hostRenderer,
       surfaces: { ui: { container } },
       code: `
-        const { useSyncedMap, h, render } = zushi;
+        const { useSyncedMap, h, ui } = zushi;
         function App() {
           const items = useSyncedMap("items");
           return h("button", { onClick: () => items.set("a", 1) }, "size=" + items.size);
         }
-        render(h(App));
+        ui.render(h(App));
       `
     });
     await plugin.start();

@@ -35,8 +35,10 @@ export const jsxSetup = `
 // from the registered components above (no raw HTML).
 export const jsxPluginSource = `
   // The JSX runtime API lands in the default \`zushi\` namespace; pull the bits
-  // we use into locals. (Registered components like View/Text stay bare.)
-  const { useState, h, render } = zushi;
+  // we use into locals. Registered components are picked up from
+  // \`zushi.components\`, Figma-style.
+  const { useState, h, ui } = zushi;
+  const { View, Text, Button, Input } = zushi.components;
 
   function App() {
     const [count, setCount] = useState(0);
@@ -69,5 +71,5 @@ export const jsxPluginSource = `
     );
   }
 
-  render(h(App), { width: 300 });
+  ui.render(h(App), { width: 300 });
 `;

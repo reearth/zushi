@@ -38,7 +38,7 @@ describe("jsx runtime (browser)", () => {
       backend,
       exposed: () => ({ host: { clicked } }),
       code: `
-        const { useState, createElement, render } = zushi;
+        const { useState, createElement, ui } = zushi;
         function App() {
           const [n, setN] = useState(0);
           return createElement(
@@ -50,7 +50,7 @@ describe("jsx runtime (browser)", () => {
             "n:" + n
           );
         }
-        render(createElement(App, null));
+        ui.render(createElement(App, null));
       `
     });
     await plugin.start();

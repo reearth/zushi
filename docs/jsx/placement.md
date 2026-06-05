@@ -1,24 +1,27 @@
 # Runtime API placement
 
-The host controls exactly how the runtime API (`useState`, `h`, `render`, …) is
-planted into plugin scope — there are **no fixed bare globals**. Three ways, from
-defaults to full control.
+The host controls exactly how the runtime API (`useState`, `h`, the surface
+handles, …) is planted into plugin scope — there are **no fixed bare globals**.
+Three ways, from defaults to full control.
 
 ## 1. Default namespace
 
-By default the API lands in a `zushi` namespace object:
+By default the API lands in a `zushi` namespace object, together with one
+handle per declared surface (`zushi.ui`, `zushi.modal`, …), the `surface(name)`
+accessor and the `components` record:
 
 ```ts
 new Plugin({ jsx: true, /* … */ });
 // plugin code:
-//   const { useState, render } = zushi;
+//   const { useState, ui } = zushi;
+//   ui.render(…);
 ```
 
 Change the name, or use bare globals, with `namespace`:
 
 ```ts
 new Plugin({ jsx: true, namespace: "reearth" }); // reearth.useState, …
-new Plugin({ jsx: true, namespace: false });     // bare: useState, render, …
+new Plugin({ jsx: true, namespace: false });     // bare: useState, ui, …
 ```
 
 ## 2. `runtime` refs (per-name placement)
@@ -33,10 +36,10 @@ new Plugin({
     reearth: {
       ui: surfaces.ui.api,          // host value (marshaled)
       useState: runtime.useState,   // runtime ref → resolved in the VM
-      render: runtime.render
+      surface: runtime.surface
     }
   })
-  // plugin code: reearth.useState(…), reearth.render(…)
+  // plugin code: reearth.useState(…), reearth.surface("ui").render(…)
 });
 ```
 
@@ -59,7 +62,8 @@ new Plugin({
   namespace: false,                 // don't auto-plant anything
   setup: `
     // Full runtime in scope as bare names (and as __zushi.runtime).
-    globalThis.widget = { useState, h, render, AutoLayout: View };
+    registerComponent("AutoLayout", (p) => h("div", { style: { display: "flex" } }, p.children));
+    globalThis.widget = { useState, h, ui: surface("ui"), ...components };
   `
 });
 ```

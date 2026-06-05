@@ -14,7 +14,7 @@ describe("runtime refs", () => {
     const tree: any = {
       host: { fn: () => {} },
       reearth: { useState: refs.useState, ui: { label: "x" } },
-      list: [refs.render, { keep: 1 }]
+      list: [refs.surface, { keep: 1 }]
     };
     const placements = extractPlacements(tree);
 
@@ -28,7 +28,7 @@ describe("runtime refs", () => {
 
     // ...and their paths + names were recorded (including the array index).
     expect(placements).toContainEqual({ path: ["reearth", "useState"], name: "useState" });
-    expect(placements).toContainEqual({ path: ["list", "0"], name: "render" });
+    expect(placements).toContainEqual({ path: ["list", "0"], name: "surface" });
   });
 
   test("no refs → no placements", () => {

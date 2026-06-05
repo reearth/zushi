@@ -15,9 +15,10 @@
  *    integer ids held in a VM-local registry) and pushed to the host;
  *  - incoming events are dispatched back to the registered handlers.
  *
- * Custom components are registered (trusted) via `registerComponent`; only
- * markup produced *inside* a trusted component may use intrinsic HTML tags when
- * the host restricts intrinsics. Only plain JSON crosses to the host; handler
+ * Custom components are registered (trusted) via `registerComponent` into the
+ * `components` record (plugins destructure them, Figma-style); only markup
+ * produced *inside* a trusted component may use intrinsic HTML tags when the
+ * host restricts intrinsics. Only plain JSON crosses to the host; handler
  * functions never leave the VM.
  */
 function zushiVmRuntime() {
@@ -85,11 +86,16 @@ function zushiVmRuntime() {
     };
   }
 
-  /** Register a trusted custom component, also exposed as a global by name. */
+  // Trusted custom components, keyed by registered name. Exposed to plugin
+  // code as the `components` record (one live object — registrations from the
+  // trusted `setup` slot are visible to the plugin, which runs after it).
+  const components: any = {};
+
+  /** Register a trusted custom component into the `components` record. */
   function registerComponent(name: string, fn: any) {
     if (typeof fn !== "function") return;
     trusted.add(fn);
-    g[name] = fn;
+    components[name] = fn;
   }
 
   function intrinsicAllowed(tag: string): boolean {
@@ -377,23 +383,59 @@ function zushiVmRuntime() {
     });
   }
 
-  function render(element: any, options: any) {
-    const opts = options || {};
-    const id = opts.surface || defaultSurface;
-    if (surfaceNames && surfaceNames.indexOf(id) < 0) {
-      reportError(
-        new Error('zushi: render() to unknown surface "' + id + '"')
-      );
-      return;
-    }
-    const root = getRoot(id);
-    root.rootElement = element;
-    root.options = {
-      visible: opts.visible,
-      width: opts.width,
-      height: opts.height
+  // ---- surface objects ----------------------------------------------------
+  // Plugins drive a surface through its handle — `zushi.ui.render(...)`,
+  // `surface("modal").resize(...)` — instead of a global render(element,
+  // { surface }) call. One handle per host-declared surface.
+
+  function makeSurfaceApi(id: string) {
+    return {
+      id: id,
+      /** Mount an element tree into this surface and start reconciling it. */
+      render: function (element: any, options: any) {
+        const opts = options || {};
+        const root = getRoot(id);
+        root.rootElement = element;
+        root.options = {
+          visible: opts.visible,
+          width: opts.width,
+          height: opts.height
+        };
+        doRender(root);
+      },
+      resize: function (width: any, height: any) {
+        if (bridge && bridge.update) bridge.update(id, { width: width, height: height });
+      },
+      show: function () {
+        if (bridge && bridge.update) bridge.update(id, { visible: true });
+      },
+      hide: function () {
+        if (bridge && bridge.update) bridge.update(id, { visible: false });
+      }
     };
-    doRender(root);
+  }
+
+  const surfaceApis: any = {};
+  if (surfaceNames) {
+    for (let i = 0; i < surfaceNames.length; i++) {
+      surfaceApis[surfaceNames[i]] = makeSurfaceApi(surfaceNames[i]);
+    }
+  }
+
+  /** Look up a surface handle by name (default: the host's default surface). */
+  function surface(name: any) {
+    const id = name == null ? defaultSurface : name;
+    if (id == null) {
+      throw new Error(
+        "zushi: surface() needs a name — the host declared no default surface"
+      );
+    }
+    const api = surfaceApis[id];
+    if (api) return api;
+    if (surfaceNames) {
+      throw new Error('zushi: unknown surface "' + id + '"');
+    }
+    return (surfaceApis[id] = makeSurfaceApi(id));
   }
 
   function doRender(root: any) {
@@ -719,7 +761,8 @@ function zushiVmRuntime() {
     memo: memo,
     ErrorBoundary: ErrorBoundary,
     Suspense: Suspense,
-    render: render
+    surface: surface,
+    components: components
   };
 
   // Internal wiring for the automatic JSX runtime (jsxImportSource). Always
@@ -743,6 +786,14 @@ function zushiVmRuntime() {
     const k = apiNames[i];
     if (k === "registerComponent" && !exposeReg) continue;
     sealed[k] = runtime[k];
+  }
+
+  // Direct handles for the declared surfaces — `zushi.ui`, `zushi.modal`, … —
+  // on top of the `surface(name)` accessor. Runtime API names win on collision
+  // (the handle stays reachable via `surface()`).
+  const surfaceIds = Object.keys(surfaceApis);
+  for (let i = 0; i < surfaceIds.length; i++) {
+    if (!(surfaceIds[i] in sealed)) sealed[surfaceIds[i]] = surfaceApis[surfaceIds[i]];
   }
 
   // Permanent, placement-independent handle for the explicit-import shim
@@ -772,8 +823,10 @@ function zushiVmRuntime() {
     // Default placement: a namespace object, or bare globals when `false`.
     const ns = config.namespace === undefined ? "zushi" : config.namespace;
     if (ns === false) {
-      for (let i = 0; i < apiNames.length; i++) {
-        if (sealed[apiNames[i]] !== undefined) g[apiNames[i]] = sealed[apiNames[i]];
+      const sealedNames = Object.keys(sealed);
+      for (let i = 0; i < sealedNames.length; i++) {
+        if (sealed[sealedNames[i]] !== undefined)
+          g[sealedNames[i]] = sealed[sealedNames[i]];
       }
     } else {
       g[ns] = sealed;

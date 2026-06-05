@@ -22,12 +22,12 @@ new Plugin({
   surfaces: { ui: { container } },
   synced: { initial: { count: 0 } },   // optional seed
   code: `
-    const { useSyncedState, h, render } = zushi;
+    const { useSyncedState, h, ui } = zushi;
     function Counter() {
       const [n, setN] = useSyncedState("count", 0);
       return h("button", { onClick: () => setN(n + 1) }, "count: " + n);
     }
-    render(h(Counter));
+    ui.render(h(Counter));
   `
 });
 ```

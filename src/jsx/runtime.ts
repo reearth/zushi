@@ -1,7 +1,7 @@
 /**
  * Explicit-import surface for plugin authors who bundle their plugin code:
  *
- *   import { render, useState, createElement, Fragment } from "@reearth/zushi/jsx";
+ *   import { surface, useState, createElement, Fragment } from "@reearth/zushi/jsx";
  *
  * Every export delegates to the runtime bundle the in-VM runtime installs at the
  * placement-independent global `__zushi_api` (see ./vmRuntime), so bundled code
@@ -36,23 +36,64 @@ export function createElement(
 
 export const h = createElement;
 
-/** Render an element tree into a plugin UI surface (defaults to the main UI). */
-export function render(
-  element: unknown,
-  options?: {
-    surface?: string;
-    visible?: boolean;
-    width?: number | string;
-    height?: number | string;
-  }
-): void {
-  api().render(element, options);
+/** Options accepted by {@link SurfaceHandle.render}. */
+export type SurfaceRenderOptions = {
+  visible?: boolean;
+  width?: number | string;
+  height?: number | string;
+};
+
+/**
+ * A handle to one host-declared UI surface. Obtained via {@link surface};
+ * raw-source plugins reach the same handles as `zushi.ui`, `zushi.modal`, ….
+ */
+export type SurfaceHandle = {
+  /** The surface's host-declared name. */
+  readonly id: string;
+  /** Mount an element tree into this surface and start reconciling it. */
+  render(element: unknown, options?: SurfaceRenderOptions): void;
+  resize(width?: number | string, height?: number | string): void;
+  show(): void;
+  hide(): void;
+};
+
+/**
+ * Look up a surface handle by name. With no argument, returns the host's
+ * default surface (`"ui"` when declared, else the only one). Throws on an
+ * unknown name.
+ */
+export function surface(name?: string): SurfaceHandle {
+  return api().surface(name);
 }
 
 /**
- * Register a trusted custom component, also made available as a global of the
- * same name. Typically called from the host's trusted `setup` source, not
- * from plugin code (it is absent from the bundle unless the host opts in).
+ * The trusted components registered by the host (via `registerComponent` in the
+ * `setup` slot), keyed by name — destructure what you need, Figma-style:
+ *
+ *   const { View, Text } = components;
+ *
+ * Captured lazily: registrations are visible because `setup` runs before
+ * plugin code, and the record is one live object.
+ */
+export const components: Record<string, Component> = new Proxy(
+  {},
+  {
+    get: (_t, key) =>
+      typeof key === "string" ? api().components?.[key] : undefined,
+    has: (_t, key) =>
+      typeof key === "string" && !!api().components && key in api().components,
+    ownKeys: () => (api().components ? Reflect.ownKeys(api().components) : []),
+    getOwnPropertyDescriptor: (_t, key) =>
+      api().components
+        ? Object.getOwnPropertyDescriptor(api().components, key)
+        : undefined
+  }
+);
+
+/**
+ * Register a trusted custom component into the {@link components} record.
+ * Typically called from the host's trusted `setup` source, not from plugin
+ * code (it is absent from the bundle unless the host opts in).
  */
 export function registerComponent(name: string, fn: Component): void {
   api().registerComponent(name, fn);

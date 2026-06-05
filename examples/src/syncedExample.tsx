@@ -6,7 +6,7 @@ import { backend, Log, useHostLog } from "./shared";
 
 // The plugin's counter lives in the host-owned synced store, keyed "count".
 const syncedPluginSource = `
-  const { useSyncedState, h, render } = zushi;
+  const { useSyncedState, h, ui } = zushi;
   function App() {
     const [n, setN] = useSyncedState("count", 0);
     return h("div", { style: { font: "14px sans-serif", padding: "8px", display: "flex", gap: "8px", alignItems: "center" } },
@@ -14,7 +14,7 @@ const syncedPluginSource = `
       h("strong", null, "count: " + n)
     );
   }
-  render(h(App));
+  ui.render(h(App));
 `;
 
 // Synced state: the count is shared two-way with the host and persisted across

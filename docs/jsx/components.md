@@ -17,8 +17,9 @@ new Plugin({
     registerComponent("Text", (p) => h("span", { style: p.style }, p.children));
   `,
   code: `
-    const { h, render } = zushi;     // registered View/Text are bare globals
-    render(h(View, { gap: 8 }, h(Text, null, "hello")));
+    const { h, ui } = zushi;
+    const { View, Text } = zushi.components; // destructure, Figma-style
+    ui.render(h(View, { gap: 8 }, h(Text, null, "hello")));
   `
 });
 ```
@@ -37,11 +38,14 @@ policy — the runtime tracks trust depth, so a trusted component can emit `div`
 even when plugin code can't. This is what makes a curated vocabulary work:
 plugins compose `View`/`Text`, the components emit the real intrinsics.
 
-## `registerComponent` and sealing
+## `registerComponent`, the `components` record, and sealing
 
-`registerComponent(name, fn)` registers a trusted component and exposes it as a
-bare global by name (so plugin code uses `<View>` / `h(View, …)` directly,
-independent of where the runtime API is placed).
+`registerComponent(name, fn)` registers a trusted component into the
+**`components` record**. Plugin code destructures the ones it uses —
+`const { View, Text } = zushi.components` — Figma-style (components are values
+you import, not bare globals that appear in scope). Bundled plugins can do the
+same via `import { components } from "@reearth/zushi/jsx"`. Trust travels with
+the function's identity, so destructured references stay trusted.
 
 By default `registerComponent` is **sealed from plugin code**: it's only in
 scope inside the trusted [`setup`](./placement.md#3-the-setup-slot-manual-wiring)

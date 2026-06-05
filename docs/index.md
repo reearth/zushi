@@ -34,7 +34,7 @@ See [Concepts](./concepts.md) for the full data-flow picture.
 - [Runtime API reference](./jsx/runtime-api.md) — every hook & exposed function, with signatures
 - [Runtime API placement](./jsx/placement.md) — namespace, `runtime` refs, the `setup` slot, bridge sealing
 - [Synced state](./jsx/synced.md) — `useSyncedState` / `useSyncedMap` (shared, host-drivable, persisted)
-- [Components & intrinsics](./jsx/components.md) — `registerComponent`, trust, restricting HTML
+- [Components & intrinsics](./jsx/components.md) — `registerComponent`, the `components` record, trust, restricting HTML
 - [Renderers](./jsx/renderers.md) — iframe vs host-direct, react-konva, the patcher contract
 
 ### Integration

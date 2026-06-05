@@ -14,12 +14,12 @@ new Plugin({
   jsx: true,
   surfaces: { ui: { container } },
   code: `
-    const { useState, h, render } = zushi;
+    const { useState, h, ui } = zushi;
     function Counter() {
       const [n, setN] = useState(0);
       return h("button", { onClick: () => setN(n + 1) }, "count: " + n);
     }
-    render(h(Counter));   // mounts into the "ui" surface by default
+    ui.render(h(Counter));   // each surface has its own handle
   `
 });
 ```
@@ -36,12 +36,13 @@ new Plugin({
   (`{ fallback, onError }`), and a basic `Suspense` (`{ fallback }`) that shows
   the fallback while a child throws a thenable and re-renders when it settles.
   There is no `lazy()` — the VM has no module loader.
-- `h` / `createElement`, `Fragment`, `render`.
-
-`render(el, { surface, visible, width, height })` mounts into a surface.
-Without `surface` it targets the surface named `"ui"` (or the only one declared
-if there's a single surface under another name). Each surface reconciles
-independently.
+- `h` / `createElement`, `Fragment`.
+- **Surface handles**: one per declared surface (`zushi.ui`, `zushi.modal`, …)
+  plus the `surface(name)` accessor. `ui.render(el, { visible, width, height })`
+  mounts into that surface; `ui.resize(w, h)` / `ui.show()` / `ui.hide()` drive
+  it afterwards. Each surface reconciles independently.
+- **`components`**: the record of trusted components the host registered —
+  destructure what you need, Figma-style (`const { View } = zushi.components`).
 
 **Signatures and per-function behavior:** see the
 [runtime API reference](./runtime-api.md).
@@ -79,7 +80,7 @@ whichever way you prefer, pointing it at wherever you
 //    (tsconfig / esbuild / vite). Resolves to @reearth/zushi/jsx-runtime.
 
 // 3) Explicit import (for bundled plugins).
-import { render, useState, createElement, Fragment } from "@reearth/zushi/jsx";
+import { surface, useState, createElement, Fragment } from "@reearth/zushi/jsx";
 ```
 
 All three produce the same `createElement` calls against the in-VM runtime. The

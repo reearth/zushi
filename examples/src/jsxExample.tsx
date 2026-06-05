@@ -24,7 +24,7 @@ export function JsxExample() {
 
   return (
     <section className="card">
-      <h2>JSX · render(&lt;App/&gt;)</h2>
+      <h2>JSX · ui.render(&lt;App/&gt;)</h2>
       <PluginView
         jsx
         setup={jsxSetup}

@@ -70,7 +70,7 @@ export type HostRenderContext = {
 export interface HostRendererInstance {
   /** Draw a serialized tree (the full tree each call; diff as you like). */
   render(tree: SNode[], gen: number): void;
-  /** Optional resize hook (width/height from `render(el, { width, height })`). */
+  /** Optional resize hook (from `ui.render(el, { width, height })` / `ui.resize()`). */
   resize?(width?: number | string, height?: number | string): void;
   dispose(): void;
 }

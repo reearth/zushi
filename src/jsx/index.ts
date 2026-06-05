@@ -22,7 +22,11 @@ export {
   type RuntimeRefs
 } from "./runtimeRefs";
 export { SyncedStore, type SyncedStoreOptions } from "./syncedStore";
-export { type SyncedMap } from "./runtime";
+export {
+  type SyncedMap,
+  type SurfaceHandle,
+  type SurfaceRenderOptions
+} from "./runtime";
 export {
   FRAGMENT,
   ROOT_ID,

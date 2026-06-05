@@ -65,10 +65,10 @@ export type PluginOptions = {
   surfaces?: Record<string, SurfaceConfig>;
   /**
    * Opt in to the JSX UI runtime. When enabled, `createElement`/`Fragment`,
-   * hooks (`useState`, `useEffect`, ...) and a `render()` global are installed
-   * in the VM, and `render(<App/>, { surface })` drives a surface's iframe
-   * declaratively. Off by default; the plain `surface.show(html)` path is
-   * unaffected.
+   * hooks (`useState`, `useEffect`, ...) and per-surface handles are installed
+   * in the VM, and `zushi.ui.render(<App/>)` (or
+   * `zushi.surface(name).render(...)`) drives a surface's iframe declaratively.
+   * Off by default; the plain `surface.show(html)` path is unaffected.
    */
   jsx?: boolean;
   /**
@@ -77,22 +77,26 @@ export type PluginOptions = {
    * code is timing — components registered here via `registerComponent(name, fn)`
    * (à la Figma's `View`/`Text`) become trusted, so the markup they emit may use
    * intrinsic tags even when {@link intrinsics} forbids them in plugin code.
+   * Plugin code picks them up from the `components` record
+   * (`const { View } = zushi.components`).
    *
    * The full JSX runtime is in scope here as bare names — `registerComponent`,
-   * `h`/`createElement`, `Fragment`, `render`, the hooks (`useState`,
-   * `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`, `useCallback`,
-   * `useRef`, `useId`, `createContext`, `useContext`), plus `memo`,
-   * `ErrorBoundary` and `Suspense` — regardless of where {@link namespace}
-   * placed them for plugin code. (It is run inside `with (__zushi.runtime)`.)
-   * The bundle is also reachable as `__zushi.runtime` for explicit wiring.
-   * Requires {@link jsx}.
+   * `h`/`createElement`, `Fragment`, `surface`, `components`, the hooks
+   * (`useState`, `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`,
+   * `useCallback`, `useRef`, `useId`, `createContext`, `useContext`), plus
+   * `memo`, `ErrorBoundary` and `Suspense` — regardless of where
+   * {@link namespace} placed them for plugin code. (It is run inside
+   * `with (__zushi.runtime)`.) The bundle is also reachable as
+   * `__zushi.runtime` for explicit wiring. Requires {@link jsx}.
    */
   setup?: string;
   /**
    * Where the JSX runtime API is planted for plugin code when the host does not
    * place it explicitly via `runtime` refs (see {@link PluginContext.runtime}):
-   * a namespace object name (default `"zushi"` → `zushi.useState`, …) or
-   * `false` for bare globals. Ignored once any `runtime` ref is placed. Requires
+   * a namespace object name (default `"zushi"` → `zushi.useState`,
+   * `zushi.ui.render(...)`, …) or `false` for bare globals. Surface handles land
+   * there too, one per declared surface, plus the `surface(name)` accessor and
+   * the `components` record. Ignored once any `runtime` ref is placed. Requires
    * {@link jsx}.
    */
   namespace?: RuntimeNamespace;

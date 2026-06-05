@@ -36,6 +36,8 @@ class JsxController {
   private onEvent: (data: any) => void;
   private patcherHtml: string;
   private mounted = false;
+  /** Surface options requested (via `update`) before the first render mounts. */
+  private pendingOptions: Record<string, unknown> = {};
 
   constructor(
     surface: UISurface,
@@ -58,7 +60,8 @@ class JsxController {
 
   push(payload: RenderPayload, options?: any): void {
     if (!this.mounted) {
-      this.surface.show(this.patcherHtml, options ?? {});
+      this.surface.show(this.patcherHtml, { ...this.pendingOptions, ...options });
+      this.pendingOptions = {};
       this.mounted = true;
     } else if (options && (options.width != null || options.height != null)) {
       this.surface.resize(options.width, options.height);
@@ -68,6 +71,19 @@ class JsxController {
       g: payload.g,
       tree: payload.tree
     });
+  }
+
+  /** Surface ops from the VM (`ui.resize()` / `ui.show()` / `ui.hide()`). */
+  update(options: { visible?: boolean; width?: unknown; height?: unknown }): void {
+    if (!this.mounted) {
+      // Remember and apply when the first render mounts the iframe.
+      this.pendingOptions = { ...this.pendingOptions, ...options };
+      return;
+    }
+    if (options.width != null || options.height != null) {
+      this.surface.resize(options.width as any, options.height as any);
+    }
+    if (options.visible != null) this.surface.setVisible(options.visible);
   }
 
   dispose(): void {}
@@ -109,6 +125,19 @@ class HostController {
       this.instance.resize(options.width, options.height);
     }
     this.instance.render(payload.tree, payload.g);
+  }
+
+  /**
+   * Surface ops from the VM. Host renderers own their container, so only
+   * `resize` is honored (and only once mounted); visibility is the host's call.
+   */
+  update(options: { visible?: boolean; width?: unknown; height?: unknown }): void {
+    if (
+      this.instance?.resize &&
+      (options.width != null || options.height != null)
+    ) {
+      this.instance.resize(options.width as any, options.height as any);
+    }
   }
 
   dispose(): void {
@@ -214,6 +243,10 @@ export class JsxHost {
   /** The object exposed into the VM as `__zushi`. */
   get bridge(): {
     render: (surfaceId: SurfaceId, payload: RenderPayload, options?: any) => void;
+    update: (
+      surfaceId: SurfaceId,
+      options: { visible?: boolean; width?: unknown; height?: unknown }
+    ) => void;
     ready: (dispatch: DispatchFn) => void;
     synced?: VmSyncedApi;
     config: {
@@ -229,6 +262,9 @@ export class JsxHost {
     return {
       render: (surfaceId, payload, options) =>
         this.controllers.get(surfaceId)?.push(payload, options),
+      // Surface ops (resize / show / hide) from the VM's surface handles.
+      update: (surfaceId, options) =>
+        this.controllers.get(surfaceId)?.update(options),
       ready: (dispatch) => {
         this.dispatch = dispatch;
       },

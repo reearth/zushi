@@ -20,6 +20,8 @@ export {
   SyncedStore,
   type SyncedStoreOptions,
   type SyncedMap,
+  type SurfaceHandle,
+  type SurfaceRenderOptions,
   ROOT_ID,
   MSG_RENDER,
   MSG_EVENT,

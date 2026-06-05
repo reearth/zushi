@@ -36,7 +36,8 @@ plugins is `surface.api` (a `SurfaceAPI`):
 - `show(html, { visible?, width?, height? })` — render an HTML document into the
   iframe.
 - `update({ visible?, width?, height? })` — re-render with changed options.
-- `resize(width?, height?)`, `close()` — size / hide (emits `"close"`).
+- `resize(width?, height?)`, `setVisible(visible)`, `close()` — size / toggle
+  visibility without re-rendering / hide (emits `"close"`).
 - `postMessage(message)` — send a JSON message into the iframe.
 - `on(type, cb)` / `off(type, cb)` — subscribe to surface events: `"message"`
   (a message from the iframe) and `"close"`.
