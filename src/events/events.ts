@@ -18,14 +18,31 @@ export type Unsubscribe = () => void;
 export type Events<
   E extends { [P in string]: any[] } = { [P in string]: any[] }
 > = {
+  /**
+   * Subscribe to `type`. **Prefer the returned {@link Unsubscribe} handle over
+   * {@link off}** to detach: it removes this exact registration by identity,
+   * whereas `off(callback)` must fall back to a fingerprint match for callbacks
+   * that crossed the VM boundary and can be ambiguous.
+   */
   readonly on: <T extends keyof E>(
     type: T,
     callback: EventCallback<E[T]>
   ) => Unsubscribe;
+  /**
+   * Detach a listener by callback. Kept for convenience/back-compat; **prefer
+   * the {@link Unsubscribe} handle returned by {@link on}/{@link once}**, which
+   * is exact. A callback marshaled across the VM boundary arrives as a fresh
+   * wrapper each time, so `off` resolves it by source fingerprint — and refuses
+   * to act when the fingerprint is ambiguous, leaving the listener attached.
+   */
   readonly off: <T extends keyof E>(
     type: T,
     callback: EventCallback<E[T]>
   ) => void;
+  /**
+   * Subscribe for a single dispatch. Returns an {@link Unsubscribe} handle that
+   * cancels it before it fires; **prefer it over {@link off}** (see {@link on}).
+   */
   readonly once: <T extends keyof E>(
     type: T,
     callback: EventCallback<E[T]>
