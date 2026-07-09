@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { events, mergeEvents } from "./events";
+import { events, mergeEvents, type EventEmitter } from "./events";
 
 type E = { ping: [n: number]; pong: [] };
 
@@ -38,7 +38,11 @@ describe("events", () => {
     const [srcOn, srcEmit] = events<E>();
     const [, destEmitSpyTarget] = events<E>();
     const dest = vi.fn(destEmitSpyTarget);
-    const detach = mergeEvents<E>(srcOn, dest, ["ping"]);
+    const detach = mergeEvents<E>(
+      srcOn,
+      dest as unknown as EventEmitter<E>,
+      ["ping"]
+    );
     srcEmit("ping", 7);
     expect(dest).toHaveBeenCalledWith("ping", 7);
     detach();

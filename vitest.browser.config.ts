@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 
+import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
 const root = import.meta.dirname;
@@ -16,7 +17,7 @@ export default defineConfig({
     include: ["src/**/*.browser.test.ts", "examples/**/*.browser.test.ts"],
     browser: {
       enabled: true,
-      provider: "playwright",
+      provider: playwright(),
       headless: true,
       instances: [{ browser: "chromium" }]
     }
