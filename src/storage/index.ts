@@ -1,5 +1,6 @@
 export {
   ClientStorage,
   type ClientStorageAPI,
-  type ClientStorageOptions
+  type ClientStorageOptions,
+  type ScopedClientStorage
 } from "./clientStorage";

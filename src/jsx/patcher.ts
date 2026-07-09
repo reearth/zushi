@@ -137,12 +137,26 @@ function zushiPatcher() {
 
   const CONTROLLED = { value: true, checked: true };
 
+  function styleEqual(a: any, b: any): boolean {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+    for (const k in a) if (a[k] !== b[k]) return false;
+    for (const k in b) if (!(k in a)) return false;
+    return true;
+  }
+
   function patchProps(el: any, oldP: any, newP: any) {
     for (const k in oldP) {
       if (!(k in newP)) removeProp(el, k);
     }
     for (const k2 in newP) {
-      if (oldP[k2] !== newP[k2] || k2 === "style") setProp(el, k2, newP[k2]);
+      const nv = newP[k2];
+      if (oldP[k2] === nv) continue;
+      // The tree is rebuilt every render, so `style` is always a fresh object
+      // and reference-unequal even when unchanged. Compare its entries to skip
+      // the cssText reset + full re-apply when nothing actually changed.
+      if (k2 === "style" && styleEqual(oldP[k2], nv)) continue;
+      setProp(el, k2, nv);
     }
   }
 

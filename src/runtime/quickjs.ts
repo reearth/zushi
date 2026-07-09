@@ -1,9 +1,8 @@
-import {
-  getQuickJS,
-  type QuickJSContext,
-  type QuickJSWASMModule
+import type {
+  QuickJSContext,
+  QuickJSWASMModule
 } from "quickjs-emscripten";
-import { Arena } from "quickjs-emscripten-sync";
+import type { Arena } from "quickjs-emscripten-sync";
 
 import type { Backend, BackendFactory } from "./backend";
 
@@ -101,9 +100,13 @@ export class QuickJSBackend implements Backend {
   }
 
   async init(): Promise<void> {
+    // Import the QuickJS engine and marshaling arena lazily so merely importing
+    // zushi (e.g. `PluginView` from the React entry) doesn't eagerly pull the
+    // ~95KB of emscripten glue + sync runtime — it loads only when a VM starts.
+    const { Arena } = await import("quickjs-emscripten-sync");
     const mod = this.options.module
       ? await this.options.module
-      : await getQuickJS();
+      : await (await import("quickjs-emscripten")).getQuickJS();
     const ctx = mod.newContext();
 
     const { memoryLimitBytes, maxStackSizeBytes } = this.options;

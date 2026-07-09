@@ -55,4 +55,17 @@ describe("ClientStorage", () => {
     await storage.setAsync("a", "k", 42);
     expect(await storage.getAsync("a", "k")).toBe(42);
   });
+
+  test("scoped view binds the instance id and can't reach another store", async () => {
+    storage = new ClientStorage();
+    await storage.setAsync("b", "secret", "from-b");
+    const a = storage.scoped("a");
+    await a.setAsync("k", "from-a");
+    // Reads/writes only touch instance "a"; there is no id argument to forge.
+    expect(await a.getAsync("k")).toBe("from-a");
+    expect(await a.keysAsync()).toEqual(["k"]);
+    // Instance "b"'s data is untouched and unreachable through the scoped view.
+    expect(await storage.getAsync("b", "secret")).toBe("from-b");
+    expect(await a.getAsync("secret")).toBeNull();
+  });
 });
