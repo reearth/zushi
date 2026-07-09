@@ -77,6 +77,89 @@ describe("hostReactRenderer", () => {
     expect(events).toEqual([{ hid: 7, type: "click", payload: {}, gen: 3 }]);
   });
 
+  test("strips dangerouslySetInnerHTML and javascript: URLs from plugin props", () => {
+    const rendered: any[] = [];
+    const A = function A() {};
+    const r = hostReactRenderer({
+      React: fakeReact,
+      createRoot: () => ({
+        render: (n: any) => rendered.push(n),
+        unmount: () => {}
+      }),
+      components: { A }
+    });
+    const inst = r.mount(document.createElement("div"), { onEvent: () => {} });
+    inst.render(
+      [
+        {
+          t: "A",
+          p: {
+            x: 1,
+            dangerouslySetInnerHTML: { __html: "<img src=x onerror=alert(1)>" },
+            href: "javascript:alert(1)",
+            onClick: "alert(1)",
+            ref: () => {}
+          },
+          ev: [],
+          c: []
+        }
+      ],
+      1
+    );
+    const el = rendered[0].children[0];
+    expect(el.type).toBe(A);
+    expect(el.props.x).toBe(1);
+    expect(el.props.dangerouslySetInnerHTML).toBeUndefined();
+    expect(el.props.href).toBeUndefined();
+    expect(el.props.onClick).toBeUndefined();
+    expect(el.props.ref).toBeUndefined();
+  });
+
+  test("drops tags absent from the component map instead of raw host DOM", () => {
+    const rendered: any[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const Rect = function Rect() {};
+    const r = hostReactRenderer({
+      React: fakeReact,
+      createRoot: () => ({
+        render: (n: any) => rendered.push(n),
+        unmount: () => {}
+      }),
+      components: { Rect }
+    });
+    const inst = r.mount(document.createElement("div"), { onEvent: () => {} });
+    inst.render(
+      [{ t: "div", p: {}, ev: [], c: [{ t: "Rect", p: { x: 2 }, ev: [], c: [] }] }],
+      1
+    );
+    const wrapper = rendered[0].children[0];
+    // Unknown "div" collapsed to a Fragment, not a raw <div> host element.
+    expect(wrapper.type).toBe("FRAGMENT");
+    // Its child (a known component) still renders.
+    expect(wrapper.children[0].type).toBe(Rect);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test("allowIntrinsicDOM opts unknown tags back into raw DOM rendering", () => {
+    const rendered: any[] = [];
+    const r = hostReactRenderer({
+      React: fakeReact,
+      createRoot: () => ({
+        render: (n: any) => rendered.push(n),
+        unmount: () => {}
+      }),
+      components: {},
+      allowIntrinsicDOM: true
+    });
+    const inst = r.mount(document.createElement("div"), { onEvent: () => {} });
+    inst.render([{ t: "div", p: { id: "x" }, ev: [], c: [] }], 1);
+    const el = rendered[0].children[0];
+    expect(el.type).toBe("div");
+    expect(el.props.id).toBe("x");
+    // Even opted-in, dangerous props stay stripped.
+  });
+
   test("dispose unmounts the root", () => {
     const unmount = vi.fn();
     const r = hostReactRenderer({

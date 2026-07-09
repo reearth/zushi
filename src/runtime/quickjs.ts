@@ -42,7 +42,34 @@ export type QuickJSOptions = {
    * to all of them. Defaults to `"json"`.
    */
   isMarshalable?: boolean | "json" | ((obj: any) => boolean | "json");
+  /**
+   * Wall-clock budget, in milliseconds, for a single {@link eval} or
+   * {@link pump} turn. Plugin code is untrusted, so a runaway `while (1) {}`
+   * (or an endlessly self-rescheduling promise chain) would otherwise freeze
+   * the host tab — the VM is interrupted once a turn exceeds this budget.
+   * Defaults to `5000`. Set to `0` (or a negative value) to disable.
+   */
+  maxExecutionMs?: number;
+  /**
+   * Upper bound on the number of queued promise jobs drained per {@link pump}
+   * turn. Bounds a job that keeps enqueueing more jobs. Defaults to `10000`.
+   */
+  maxJobsPerPump?: number;
+  /**
+   * Hard cap on the VM heap, in bytes, passed to QuickJS'
+   * `setMemoryLimit`. Guards against a plugin exhausting host memory. No limit
+   * by default.
+   */
+  memoryLimitBytes?: number;
+  /**
+   * Maximum VM stack size, in bytes, passed to QuickJS' `setMaxStackSize`.
+   * Bounds deep/infinite recursion in plugin code. Engine default if unset.
+   */
+  maxStackSizeBytes?: number;
 };
+
+const DEFAULT_MAX_EXECUTION_MS = 5000;
+const DEFAULT_MAX_JOBS_PER_PUMP = 10000;
 
 /**
  * A QuickJS (WASM) {@link Backend}. Evaluates untrusted JavaScript in an
@@ -55,6 +82,9 @@ export class QuickJSBackend implements Backend {
 
   private options: QuickJSOptions;
   private arenaRef: Arena | undefined;
+  // Absolute time (ms) the current eval/pump turn must finish by, read by the
+  // interrupt handler. `undefined` while the VM is idle (no deadline enforced).
+  private deadline: number | undefined;
 
   constructor(options: QuickJSOptions = {}) {
     this.options = options;
@@ -76,6 +106,24 @@ export class QuickJSBackend implements Backend {
       : await getQuickJS();
     const ctx = mod.newContext();
 
+    const { memoryLimitBytes, maxStackSizeBytes } = this.options;
+    const runtime = ctx.runtime;
+    if (typeof memoryLimitBytes === "number") {
+      runtime.setMemoryLimit(memoryLimitBytes);
+    }
+    if (typeof maxStackSizeBytes === "number") {
+      runtime.setMaxStackSize(maxStackSizeBytes);
+    }
+    const maxExecutionMs = this.options.maxExecutionMs ?? DEFAULT_MAX_EXECUTION_MS;
+    if (maxExecutionMs > 0) {
+      // Fires periodically while the interpreter runs; interrupts (throwing an
+      // InternalError into the VM) once the current turn has run past its
+      // deadline. Idle turns leave `deadline` undefined, so nothing interrupts.
+      runtime.setInterruptHandler(
+        () => this.deadline !== undefined && Date.now() > this.deadline
+      );
+    }
+
     const { isMarshalable } = this.options;
     // Values the default rule rejects (class instances, …) fall back to this:
     // a custom function, an explicit static verdict, or a "json" snapshot.
@@ -95,24 +143,51 @@ export class QuickJSBackend implements Backend {
   }
 
   eval(code: string): void {
-    this.arenaRef?.evalCode(code);
+    if (!this.arenaRef) return;
+    this.arm();
+    try {
+      this.arenaRef.evalCode(code);
+    } finally {
+      this.deadline = undefined;
+    }
   }
 
   pump(): boolean {
     if (!this.arenaRef) return false;
-    this.arenaRef.executePendingJobs();
+    this.arm();
+    try {
+      this.arenaRef.executePendingJobs(
+        this.options.maxJobsPerPump ?? DEFAULT_MAX_JOBS_PER_PUMP
+      );
+    } finally {
+      this.deadline = undefined;
+    }
     return this.arenaRef.context.runtime.hasPendingJob();
   }
 
+  /** Arm the interrupt deadline for the turn that is about to run. */
+  private arm(): void {
+    const maxExecutionMs = this.options.maxExecutionMs ?? DEFAULT_MAX_EXECUTION_MS;
+    this.deadline = maxExecutionMs > 0 ? Date.now() + maxExecutionMs : undefined;
+  }
+
   dispose(): void {
-    if (!this.arenaRef) return;
+    const arena = this.arenaRef;
+    if (!arena) return;
+    // Clear the ref first so a throw mid-dispose can't leave a half-disposed
+    // arena reachable. Dispose the arena and the context independently — the
+    // arena owns its marshaling maps, the context owns the VM — so a failure
+    // in one still runs the other and never leaks the WASM context.
+    this.arenaRef = undefined;
     try {
-      this.arenaRef.dispose();
-      this.arenaRef.context.dispose();
+      arena.dispose();
     } catch (err) {
-      console.debug("zushi: quickjs dispose error", err);
-    } finally {
-      this.arenaRef = undefined;
+      console.debug("zushi: quickjs arena dispose error", err);
+    }
+    try {
+      arena.context.dispose();
+    } catch (err) {
+      console.debug("zushi: quickjs context dispose error", err);
     }
   }
 }

@@ -55,6 +55,62 @@ export type HostReactRendererOptions = {
   components: Record<string, any>;
   /** Per-event payload serializer; default extracts pointer/key/value. */
   serializeEvent?: (evt: unknown, type: string) => unknown;
+  /**
+   * Allow tags absent from {@link components} to render as **raw host DOM
+   * elements**. Off by default: this renderer draws directly in the host page
+   * with no iframe isolation, so letting untrusted plugin trees instantiate
+   * arbitrary DOM (and its attributes) reopens the very injection surface the
+   * iframe renderers close. Leave this off unless you fully trust the plugin
+   * source; unknown tags are otherwise dropped (their children still render).
+   */
+  allowIntrinsicDOM?: boolean;
+};
+
+// Props that carry a URL; a `javascript:`/`vbscript:` value here executes.
+const URL_PROPS = new Set([
+  "href",
+  "src",
+  "xlinkHref",
+  "formAction",
+  "action",
+  "srcDoc",
+  "poster",
+  "background"
+]);
+
+const isUnsafeUrl = (v: unknown): boolean => {
+  if (typeof v !== "string") return false;
+  // Browsers ignore leading control chars/whitespace when resolving a scheme,
+  // so strip them before matching to defeat `java\tscript:` style obfuscation.
+  let s = "";
+  for (let i = 0; i < v.length; i++) {
+    if (v.charCodeAt(i) > 0x20) s += v[i];
+  }
+  s = s.toLowerCase();
+  return (
+    s.startsWith("javascript:") ||
+    s.startsWith("vbscript:") ||
+    s.startsWith("data:text/html")
+  );
+};
+
+/**
+ * Copy plugin-controlled props while refusing the ones that turn serialized
+ * data into host-page code execution — the contract a host-direct renderer
+ * must uphold (see {@link HostRenderer}). Strips `dangerouslySetInnerHTML` and
+ * `ref`, drops `javascript:` URLs, and rejects string-valued event handlers.
+ */
+const sanitizeProps = (p: Record<string, any>): Record<string, any> => {
+  const props: any = {};
+  for (const k in p) {
+    if (k === "dangerouslySetInnerHTML" || k === "ref") continue;
+    const v = p[k];
+    if (URL_PROPS.has(k) && isUnsafeUrl(v)) continue;
+    if (typeof v === "string" && k.length > 2 && k[0] === "o" && k[1] === "n")
+      continue;
+    props[k] = v;
+  }
+  return props;
 };
 
 /**
@@ -65,10 +121,15 @@ export type HostReactRendererOptions = {
  * deduped instance and the usual canvas-library setup just works.
  *
  * Only safe for non-DOM, non-executing targets — see {@link HostRenderer}.
+ * Tags absent from `components` are dropped (not rendered as raw host DOM)
+ * and plugin props that carry executable content are stripped, unless
+ * {@link HostReactRendererOptions.allowIntrinsicDOM} opts back in.
  */
 export function hostReactRenderer(options: HostReactRendererOptions): HostRenderer {
   const { React, components } = options;
   const serialize = options.serializeEvent ?? defaultSerialize;
+  const allowIntrinsicDOM = options.allowIntrinsicDOM ?? false;
+  const warned = new Set<string>();
 
   return {
     name: options.name ?? "react-host",
@@ -80,10 +141,7 @@ export function hostReactRenderer(options: HostReactRendererOptions): HostRender
       const toElement = (node: SNode): any => {
         if (node && typeof (node as any).x === "string") return (node as any).x;
         const el = node as Extract<SNode, { t: string }>;
-        const comp = components[el.t] || el.t;
-        const props: any = {};
-        const p = el.p || {};
-        for (const k in p) props[k] = p[k];
+        const props = sanitizeProps(el.p || {});
         const ev = el.ev || [];
         for (let i = 0; i < ev.length; i++) {
           const type = ev[i].t;
@@ -93,7 +151,27 @@ export function hostReactRenderer(options: HostReactRendererOptions): HostRender
         }
         if (el.k != null) props.key = el.k;
         const kids = (el.c || []).map(toElement);
-        return React.createElement(comp, props, ...kids);
+
+        const comp = components[el.t];
+        if (!comp && !allowIntrinsicDOM) {
+          // A tag with no registered component would otherwise fall back to a
+          // raw host DOM element — the injection surface this renderer must
+          // not open. Drop the element but keep its children so a stray
+          // wrapper doesn't erase a whole subtree.
+          if (!warned.has(el.t)) {
+            warned.add(el.t);
+            console.warn(
+              `zushi: hostReactRenderer dropped unregistered tag "${el.t}"; ` +
+                "add it to `components` or set `allowIntrinsicDOM` to render it."
+            );
+          }
+          return React.createElement(
+            React.Fragment,
+            el.k != null ? { key: el.k } : null,
+            ...kids
+          );
+        }
+        return React.createElement(comp || el.t, props, ...kids);
       };
 
       return {

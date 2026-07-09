@@ -50,6 +50,37 @@ describe("QuickJSBackend", () => {
     expect(backend.arena).toBeUndefined();
   });
 
+  test("interrupts runaway plugin code past the execution deadline", async () => {
+    const backend = new QuickJSBackend({ maxExecutionMs: 50 });
+    await backend.init();
+    const start = Date.now();
+    expect(() => backend.eval(`while (true) {}`)).toThrow();
+    // Interrupted promptly rather than hanging the host indefinitely.
+    expect(Date.now() - start).toBeLessThan(2000);
+    backend.dispose();
+  });
+
+  test("routes an interrupted infinite loop to onError instead of hanging", async () => {
+    const errors: any[] = [];
+    const sandbox = new Sandbox({
+      backend: quickjs({ maxExecutionMs: 50 }),
+      code: `while (true) {}`,
+      onError: (e) => errors.push(e)
+    });
+    await sandbox.start();
+    expect(errors.length).toBe(1);
+    sandbox.dispose();
+  });
+
+  test("enforces the VM memory limit", async () => {
+    const backend = new QuickJSBackend({ memoryLimitBytes: 500_000 });
+    await backend.init();
+    expect(() =>
+      backend.eval(`const a = []; while (true) { a.push(new Array(10000)); }`)
+    ).toThrow();
+    backend.dispose();
+  });
+
   test("defaultIsMarshalable rejects class instances", () => {
     class Foo {
       x = 1;
