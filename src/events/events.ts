@@ -36,11 +36,36 @@ export function events<
     >
   >();
 
+  // Fallback used when a callback's identity doesn't match a registration — it
+  // was re-marshaled across the VM boundary into a different host wrapper
+  // between `on` and `off`. Returns the single entry whose fingerprint matches,
+  // or undefined when none match OR more than one does: every VM function
+  // unmarshals to the same host-wrapper source, so their fingerprints collide,
+  // and guessing which to drop could detach the wrong listener — remove none.
+  const soleByFingerprint = (
+    ecbs: Map<
+      EventCallback<E[keyof E]>,
+      { fn: (e: Event) => void; fingerprint: string }
+    >,
+    fingerprint: string
+  ): [EventCallback<E[keyof E]>, { fn: (e: Event) => void; fingerprint: string }] | undefined => {
+    let match:
+      | [EventCallback<E[keyof E]>, { fn: (e: Event) => void; fingerprint: string }]
+      | undefined;
+    let count = 0;
+    for (const entry of ecbs.entries()) {
+      if (entry[1].fingerprint === fingerprint) {
+        if (++count > 1) return undefined; // ambiguous
+        match = entry;
+      }
+    }
+    return match;
+  };
+
   const getEventCallback = <T extends keyof E>(
     type: T,
     cb: EventCallback<E[T]>,
-    fingerprint: string,
-    checkFingerprint = false
+    fingerprint: string
   ): ((e: Event) => void) => {
     let ecbs = callbacks.get(type);
     if (!ecbs) {
@@ -49,17 +74,6 @@ export function events<
     }
 
     let ecb = ecbs.get(cb as EventCallback);
-
-    if (checkFingerprint && !ecb) {
-      // try get by fingerprint
-      for (const [_key, value] of ecbs.entries()) {
-        if (value.fingerprint === fingerprint) {
-          ecb = value;
-          break;
-        }
-      }
-    }
-
     if (!ecb) {
       ecb = {
         fn: (e: Event): void => {
@@ -79,21 +93,15 @@ export function events<
     fingerprint: string
   ): void => {
     const ecbs = callbacks.get(type);
-    if (ecbs) {
-      if (ecbs.has(cb)) {
-        ecbs.delete(cb);
-      } else {
-        // try delete by fingerprint
-        for (const [key, value] of ecbs.entries()) {
-          if (value.fingerprint === fingerprint) {
-            ecbs.delete(key);
-            break;
-          }
-        }
-      }
-      if (ecbs.size === 0) {
-        callbacks.delete(type);
-      }
+    if (!ecbs) return;
+    if (ecbs.has(cb)) {
+      ecbs.delete(cb);
+    } else {
+      const m = soleByFingerprint(ecbs, fingerprint);
+      if (m) ecbs.delete(m[0]);
+    }
+    if (ecbs.size === 0) {
+      callbacks.delete(type);
     }
   };
 
@@ -105,12 +113,22 @@ export function events<
     e.addEventListener(String(type), ecbFn);
   };
   const off = <T extends keyof E>(type: T, callback: EventCallback<E[T]>) => {
+    const ecbs = callbacks.get(type);
+    if (!ecbs) return;
     const fingerprint = getFunctionFingerprintString(callback);
-    const ecbFn = getEventCallback(type, callback, fingerprint, true);
-    // Note: we check fingerprint here to ensure we remove the correct callback.
-    // because the same callback becomes different after synchronization, but the fingerprint remains the same.
-    e.removeEventListener(String(type), ecbFn);
-    deleteEventCallback(type, ecbFn, fingerprint);
+    let key = callback as EventCallback<E[keyof E]>;
+    let ecb = ecbs.get(key);
+    if (!ecb) {
+      // Identity miss: the callback was re-marshaled into a different host
+      // wrapper between `on` and `off`. Resolve by fingerprint, but only when it
+      // is unambiguous — never guess and detach the wrong listener.
+      const m = soleByFingerprint(ecbs, fingerprint);
+      if (!m) return;
+      [key, ecb] = m;
+    }
+    e.removeEventListener(String(type), ecb.fn);
+    ecbs.delete(key);
+    if (ecbs.size === 0) callbacks.delete(type);
   };
   const once = <T extends keyof E>(type: T, callback: EventCallback<E[T]>) => {
     const fingerprint = getFunctionFingerprintString(callback);

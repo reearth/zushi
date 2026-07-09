@@ -9,6 +9,5 @@ export {
   getFunctionFingerprint,
   getFunctionFingerprintString,
   areFunctionsSame,
-  FingerprintEventSystem,
   type FunctionFingerprint
 } from "./fingerprint";

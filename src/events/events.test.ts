@@ -50,6 +50,25 @@ describe("events", () => {
     expect(onLog).toEqual([2]);
   });
 
+  test("off refuses to guess when a colliding fingerprint is ambiguous", () => {
+    const [on, emit] = events<E>();
+    // Distinct callbacks with identical source share a fingerprint (as all
+    // VM-marshaled callbacks do). Two are registered; a third — same source,
+    // different identity — is passed to off, so identity misses both.
+    const make = (log: number[]) => (n: number) => log.push(n);
+    const aLog: number[] = [];
+    const bLog: number[] = [];
+    on.on("ping", make(aLog));
+    on.on("ping", make(bLog));
+
+    on.off("ping", make([])); // ambiguous fingerprint → remove nothing
+
+    emit("ping", 5);
+    // Neither listener was wrongly detached.
+    expect(aLog).toEqual([5]);
+    expect(bLog).toEqual([5]);
+  });
+
   test("only the matching type is delivered", () => {
     const [on, emit] = events<E>();
     const ping = vi.fn();
