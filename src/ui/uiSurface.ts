@@ -17,6 +17,13 @@ export type UISurfaceOptions = {
   container: HTMLElement;
   autoResize?: AutoResize;
   visible?: boolean;
+  /**
+   * Override the iframe `sandbox` attribute (default {@link DEFAULT_SANDBOX}).
+   * Pass {@link STRICT_SANDBOX} to drop popups/downloads.
+   */
+  sandbox?: string;
+  /** Inject a `Content-Security-Policy` `<meta>` into the surface's iframe. */
+  csp?: string;
   /** Called after a message arrives so the VM job loop can be pumped. */
   startEventLoop?: () => void;
   /**
@@ -61,6 +68,8 @@ export class UISurface {
       container: opts.container,
       autoResize: opts.autoResize,
       visible: opts.visible,
+      sandbox: opts.sandbox,
+      csp: opts.csp,
       onMessage: (data) => {
         if (!this.onProtocolMessage?.(data)) {
           this.emit("message", data);

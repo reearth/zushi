@@ -31,6 +31,19 @@ export type SurfaceConfig = {
   autoResize?: AutoResize;
   /** Initial visibility (default `true`). */
   visible?: boolean;
+  /**
+   * Override the iframe `sandbox` attribute for this surface (default
+   * {@link DEFAULT_SANDBOX}). Pass {@link STRICT_SANDBOX} to drop
+   * `allow-popups` / `allow-downloads`. Never add `allow-same-origin` — it
+   * breaks the opaque-origin isolation plugin UI relies on.
+   */
+  sandbox?: string;
+  /**
+   * Inject a `Content-Security-Policy` `<meta>` into this surface's iframe to
+   * constrain what its plugin UI may load or connect to. The patcher is an
+   * inline script, so a `script-src` must permit `'unsafe-inline'`.
+   */
+  csp?: string;
 };
 
 /**
@@ -192,6 +205,8 @@ export class Plugin {
         container: cfg.container ?? this.createContainer(),
         autoResize: cfg.autoResize,
         visible: cfg.visible ?? true,
+        sandbox: cfg.sandbox,
+        csp: cfg.csp,
         startEventLoop,
         onProtocolMessage: (data) => this.jsxHost?.handle(name, data) ?? false
       });

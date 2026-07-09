@@ -10,6 +10,26 @@ export const insertToBody = (
     : `${html.substring(0, lastBodyIndex)}${insertStr}${html.substring(lastBodyIndex)}`;
 };
 
+/**
+ * Inserts `insertStr` as early as possible inside the document head: right
+ * after an opening `<head>` tag, else before `</head>`, else at the very start.
+ * Used to place a CSP `<meta>` before the content it must govern.
+ */
+export const insertToHead = (html: string, insertStr: string): string => {
+  const open = /<head[^>]*>/i.exec(html);
+  if (open) {
+    const at = open.index + open[0].length;
+    return html.slice(0, at) + insertStr + html.slice(at);
+  }
+  const close = html.toLowerCase().indexOf("</head>");
+  if (close >= 0) return html.slice(0, close) + insertStr + html.slice(close);
+  return insertStr + html;
+};
+
+/** A CSP `<meta http-equiv>` tag for the given policy (quotes escaped). */
+export const cspMeta = (policy: string): string =>
+  `<meta http-equiv="Content-Security-Policy" content="${policy.replace(/"/g, "&quot;")}">`;
+
 export const autoResizeScript = (autoResizeMessageKey: string): string => {
   return `<script id="_zushi_resize">
       if ("ResizeObserver" in window) {

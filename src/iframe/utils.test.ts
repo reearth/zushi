@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 
-import { insertToBody, autoResizeScript, sizeToPx } from "./utils";
+import {
+  insertToBody,
+  insertToHead,
+  cspMeta,
+  autoResizeScript,
+  sizeToPx
+} from "./utils";
 
 describe("insertToBody", () => {
   test("returns empty string for undefined html", () => {
@@ -14,6 +20,33 @@ describe("insertToBody", () => {
 
   test("appends when there is no body tag", () => {
     expect(insertToBody("<div>a</div>", "X")).toBe("<div>a</div>X");
+  });
+});
+
+describe("insertToHead", () => {
+  test("inserts right after an opening <head>", () => {
+    expect(insertToHead("<head><title>t</title></head>", "X")).toBe(
+      "<head>X<title>t</title></head>"
+    );
+  });
+
+  test("inserts before </head> when there is no opening tag match", () => {
+    expect(insertToHead("</head><body></body>", "X")).toBe(
+      "X</head><body></body>"
+    );
+  });
+
+  test("prepends when there is no head at all", () => {
+    expect(insertToHead("<div>a</div>", "X")).toBe("X<div>a</div>");
+  });
+});
+
+describe("cspMeta", () => {
+  test("builds a CSP meta tag and escapes quotes in the policy", () => {
+    expect(cspMeta("default-src 'none'")).toBe(
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'">`
+    );
+    expect(cspMeta('a "b"')).toContain("a &quot;b&quot;");
   });
 });
 

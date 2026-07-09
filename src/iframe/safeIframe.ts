@@ -1,8 +1,15 @@
-import { autoResizeScript, insertToBody, sizeToPx } from "./utils";
+import { autoResizeScript, cspMeta, insertToBody, insertToHead, sizeToPx } from "./utils";
 import type { AutoResize, IFrameAPI, RenderOptions } from "./types";
 
 export const DEFAULT_AUTO_RESIZE_MESSAGE_KEY = "___iframe_auto_resize___";
 export const DEFAULT_SANDBOX = "allow-scripts allow-downloads allow-popups";
+/**
+ * A minimal sandbox that keeps scripts (the patcher needs them) but drops
+ * `allow-downloads` / `allow-popups`, shrinking the phishing / unwanted-download
+ * surface. Pass as `sandbox` for untrusted plugin UI that needs neither; add
+ * flags (e.g. `allow-forms`) as your UI requires.
+ */
+export const STRICT_SANDBOX = "allow-scripts";
 
 export type SafeIFrameOptions = {
   /** Element the iframe is appended to. */
@@ -11,9 +18,19 @@ export type SafeIFrameOptions = {
   autoResizeMessageKey?: string;
   /**
    * The iframe `sandbox` attribute. Intentionally excludes `allow-same-origin`
-   * so the iframe stays in an opaque origin with no access to the host.
+   * so the iframe stays in an opaque origin with no access to the host. Defaults
+   * to {@link DEFAULT_SANDBOX}; pass {@link STRICT_SANDBOX} to drop popups and
+   * downloads.
    */
   sandbox?: string;
+  /**
+   * When set, a `Content-Security-Policy` `<meta>` with this policy is injected
+   * into the iframe document head, letting the host constrain what plugin UI may
+   * load or connect to (e.g. `"default-src 'none'; script-src 'unsafe-inline'"`).
+   * Note the patcher runs as an inline script, so a `script-src` must permit
+   * `'unsafe-inline'` for rendering to work.
+   */
+  csp?: string;
   className?: string;
   /** Master visibility gate (equivalent to "enabled & visible"). */
   visible?: boolean;
@@ -39,6 +56,7 @@ export class SafeIFrame {
   private autoResize?: AutoResize;
   private autoResizeMessageKey: string;
   private sandbox: string;
+  private csp?: string;
   private className?: string;
 
   private canBeVisible: boolean;
@@ -60,6 +78,7 @@ export class SafeIFrame {
     this.autoResizeMessageKey =
       options.autoResizeMessageKey ?? DEFAULT_AUTO_RESIZE_MESSAGE_KEY;
     this.sandbox = options.sandbox ?? DEFAULT_SANDBOX;
+    this.csp = options.csp;
     this.className = options.className;
     this.canBeVisible = options.visible ?? true;
     this.onMessageCb = options.onMessage;
@@ -172,10 +191,9 @@ export class SafeIFrame {
     iframe.setAttribute("sandbox", this.sandbox);
     iframe.setAttribute("allow", "");
     if (this.className) iframe.className = this.className;
-    iframe.srcdoc = insertToBody(
-      html,
-      autoResizeScript(this.autoResizeMessageKey)
-    );
+    let doc = insertToBody(html, autoResizeScript(this.autoResizeMessageKey));
+    if (this.csp) doc = insertToHead(doc, cspMeta(this.csp));
+    iframe.srcdoc = doc;
     iframe.addEventListener("load", () => this.handleLoad());
 
     this.iframe = iframe;

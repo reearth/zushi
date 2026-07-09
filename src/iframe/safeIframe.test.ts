@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { SafeIFrame } from "./safeIframe";
+import { SafeIFrame, STRICT_SANDBOX } from "./safeIframe";
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
@@ -35,6 +35,38 @@ describe("SafeIFrame", () => {
     const sandbox = iframe!.getAttribute("sandbox") ?? "";
     expect(sandbox).toContain("allow-scripts");
     expect(sandbox).not.toContain("allow-same-origin");
+    frame.dispose();
+  });
+
+  test("honors a custom sandbox (STRICT_SANDBOX drops popups/downloads)", () => {
+    const frame = new SafeIFrame({ container, sandbox: STRICT_SANDBOX });
+    frame.render("<div>hi</div>");
+    const sandbox =
+      container.querySelector("iframe")!.getAttribute("sandbox") ?? "";
+    expect(sandbox).toBe("allow-scripts");
+    expect(sandbox).not.toContain("allow-popups");
+    expect(sandbox).not.toContain("allow-downloads");
+    frame.dispose();
+  });
+
+  test("injects a CSP meta into the head when csp is set", () => {
+    const frame = new SafeIFrame({
+      container,
+      csp: "default-src 'none'; script-src 'unsafe-inline'"
+    });
+    frame.render("<html><head></head><body>x</body></html>");
+    const srcdoc = container.querySelector("iframe")!.srcdoc;
+    expect(srcdoc).toContain('http-equiv="Content-Security-Policy"');
+    expect(srcdoc).toContain("default-src 'none'");
+    frame.dispose();
+  });
+
+  test("omits the CSP meta when csp is not set", () => {
+    const frame = new SafeIFrame({ container });
+    frame.render("<html><head></head><body>x</body></html>");
+    expect(container.querySelector("iframe")!.srcdoc).not.toContain(
+      "Content-Security-Policy"
+    );
     frame.dispose();
   });
 
