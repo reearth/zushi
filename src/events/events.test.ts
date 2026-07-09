@@ -17,6 +17,43 @@ describe("events", () => {
     expect(cb).toHaveBeenCalledTimes(2);
   });
 
+  test("on returns an unsubscribe handle that detaches exactly that listener", () => {
+    const [on, emit] = events<E>();
+    const a = vi.fn();
+    const b = vi.fn();
+    const offA = on.on("ping", a);
+    on.on("ping", b);
+    emit("ping", 1);
+    offA(); // detach only `a`, by identity
+    emit("ping", 2);
+    expect(a.mock.calls).toEqual([[1]]);
+    expect(b.mock.calls).toEqual([[1], [2]]);
+  });
+
+  test("unsubscribe resolves the right listener even when fingerprints collide", () => {
+    const [on, emit] = events<E>();
+    // Same source => identical fingerprint; the handle uses identity, not it.
+    const make = (log: number[]) => (n: number) => log.push(n);
+    const aLog: number[] = [];
+    const bLog: number[] = [];
+    const offA = on.on("ping", make(aLog));
+    on.on("ping", make(bLog));
+    offA();
+    emit("ping", 9);
+    // `a` gone, `b` intact — no fingerprint ambiguity because it's by identity.
+    expect(aLog).toEqual([]);
+    expect(bLog).toEqual([9]);
+  });
+
+  test("once returns a handle that cancels it before it fires", () => {
+    const [on, emit] = events<E>();
+    const cb = vi.fn();
+    const cancel = on.once("pong", cb);
+    cancel();
+    emit("pong");
+    expect(cb).not.toHaveBeenCalled();
+  });
+
   test("once fires at most once", () => {
     const [on, emit] = events<E>();
     const cb = vi.fn();

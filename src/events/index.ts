@@ -3,7 +3,8 @@ export {
   mergeEvents,
   type Events,
   type EventEmitter,
-  type EventCallback
+  type EventCallback,
+  type Unsubscribe
 } from "./events";
 export {
   getFunctionFingerprint,

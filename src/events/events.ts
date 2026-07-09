@@ -7,13 +7,21 @@ export type EventEmitter<
   E extends { [P in string]: any[] } = { [P in string]: any[] }
 > = <T extends keyof E>(type: T, ...args: E[T]) => void;
 
+/**
+ * Detaches the listener registered by the `on`/`once` call that returned it.
+ * Unlike `off(callback)`, it holds the exact registration by identity, so it is
+ * immune to the marshaled-callback fingerprint collision — prefer it when the
+ * callback may originate from (or cross) the VM boundary.
+ */
+export type Unsubscribe = () => void;
+
 export type Events<
   E extends { [P in string]: any[] } = { [P in string]: any[] }
 > = {
   readonly on: <T extends keyof E>(
     type: T,
     callback: EventCallback<E[T]>
-  ) => void;
+  ) => Unsubscribe;
   readonly off: <T extends keyof E>(
     type: T,
     callback: EventCallback<E[T]>
@@ -21,7 +29,7 @@ export type Events<
   readonly once: <T extends keyof E>(
     type: T,
     callback: EventCallback<E[T]>
-  ) => void;
+  ) => Unsubscribe;
 };
 
 export function events<
@@ -87,30 +95,26 @@ export function events<
     return ecb.fn;
   };
 
-  const deleteEventCallback = (
-    type: keyof E,
-    cb: EventCallback,
-    fingerprint: string
-  ): void => {
-    const ecbs = callbacks.get(type);
-    if (!ecbs) return;
-    if (ecbs.has(cb)) {
-      ecbs.delete(cb);
-    } else {
-      const m = soleByFingerprint(ecbs, fingerprint);
-      if (m) ecbs.delete(m[0]);
-    }
-    if (ecbs.size === 0) {
-      callbacks.delete(type);
-    }
-  };
-
-  const on = <T extends keyof E>(type: T, callback: EventCallback<E[T]>) => {
+  const on = <T extends keyof E>(
+    type: T,
+    callback: EventCallback<E[T]>
+  ): Unsubscribe => {
     const fingerprint = getFunctionFingerprintString(callback);
     // Note: when binding callbacks, we don't check fingerprint,
     // because the previous one could be out of lifecycle but with the same fingerprint.
     const ecbFn = getEventCallback(type, callback, fingerprint);
     e.addEventListener(String(type), ecbFn);
+    const key = callback as EventCallback<E[keyof E]>;
+    // Removes this exact registration by identity — no fingerprint, no
+    // ambiguity, even if the callback was marshaled across the VM boundary.
+    return () => {
+      e.removeEventListener(String(type), ecbFn);
+      const ecbs = callbacks.get(type);
+      if (ecbs) {
+        ecbs.delete(key);
+        if (ecbs.size === 0) callbacks.delete(type);
+      }
+    };
   };
   const off = <T extends keyof E>(type: T, callback: EventCallback<E[T]>) => {
     const ecbs = callbacks.get(type);
@@ -130,17 +134,33 @@ export function events<
     ecbs.delete(key);
     if (ecbs.size === 0) callbacks.delete(type);
   };
-  const once = <T extends keyof E>(type: T, callback: EventCallback<E[T]>) => {
+  const once = <T extends keyof E>(
+    type: T,
+    callback: EventCallback<E[T]>
+  ): Unsubscribe => {
     const fingerprint = getFunctionFingerprintString(callback);
     const ecbFn = getEventCallback(type, callback, fingerprint);
+    const key = callback as EventCallback<E[keyof E]>;
+    // Drop the `callbacks` Map entry by identity (EventTarget removes the
+    // listener itself via `{ once: true }` / removeEventListener). Doing it by
+    // identity avoids relying on the collision-prone fingerprint fallback.
+    const removeEntry = (): void => {
+      const ecbs = callbacks.get(type);
+      if (ecbs) {
+        ecbs.delete(key);
+        if (ecbs.size === 0) callbacks.delete(type);
+      }
+    };
     const wrapped = (ev: Event): void => {
-      // EventTarget auto-removes the listener after it fires, but the `callbacks`
-      // Map entry would otherwise leak — drop it here so once-listeners don't
-      // accumulate across fires.
-      deleteEventCallback(type, ecbFn, fingerprint);
+      removeEntry();
       ecbFn(ev);
     };
     e.addEventListener(String(type), wrapped, { once: true });
+    // Cancel before it fires: detach the listener and drop the entry.
+    return () => {
+      e.removeEventListener(String(type), wrapped);
+      removeEntry();
+    };
   };
 
   const events = {
@@ -165,20 +185,14 @@ export function events<
 export function mergeEvents<
   E extends Record<string, any[]> = Record<string, any[]>
 >(source: Events<E>, dest: EventEmitter<E>, types: (keyof E)[]): () => void {
-  const cbs = types.reduce<{ [T in keyof E]: EventCallback<E[T]> }>((a, b) => {
-    a[b] = (...args: E[typeof b]) => {
-      dest(b, ...args);
-    };
-    return a;
-  }, {} as any);
-
-  for (const t of Object.keys(cbs)) {
-    source.on(t, cbs[t]);
-  }
-
+  // Forward each type and keep the unsubscribe handle, so teardown detaches the
+  // exact registrations by identity — no fingerprint round-trip.
+  const unsubs = types.map((t) =>
+    source.on(t, (...args: E[typeof t]) => {
+      dest(t, ...args);
+    })
+  );
   return () => {
-    for (const t of Object.keys(cbs)) {
-      source.off(t, cbs[t]);
-    }
+    for (const unsub of unsubs) unsub();
   };
 }

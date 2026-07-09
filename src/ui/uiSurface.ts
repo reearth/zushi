@@ -1,4 +1,9 @@
-import { events, type EventEmitter, type Events } from "../events";
+import {
+  events,
+  type EventEmitter,
+  type Events,
+  type Unsubscribe
+} from "../events";
 import { SafeIFrame, type AutoResize } from "../iframe";
 
 export type UIEvents = {
@@ -112,8 +117,8 @@ export class UISurface {
   on = <T extends keyof UIEvents>(
     type: T,
     cb: (...args: UIEvents[T]) => void
-  ): void => {
-    this.events.on(type, cb);
+  ): Unsubscribe => {
+    return this.events.on(type, cb);
   };
 
   off = <T extends keyof UIEvents>(
