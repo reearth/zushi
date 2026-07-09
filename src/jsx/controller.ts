@@ -205,7 +205,16 @@ export class JsxHost {
       const surface = options.surfaces[id];
       if (!surface) continue;
       const onEvent = (data: any) => {
-        this.dispatch?.(id, data.hid, data.type, data.payload, data.g);
+        // Serialize the payload once so it crosses into the VM as a single
+        // string rather than a live object marshalled (and retained) field by
+        // field per event. The VM runtime parses it back.
+        this.dispatch?.(
+          id,
+          data.hid,
+          data.type,
+          JSON.stringify(data.payload ?? null),
+          data.g
+        );
         // Iframe events get pumped by the surface's message handler; host-direct
         // events arrive in-realm, so pump here to run the resulting re-render.
         if (host) this.startEventLoop?.();
@@ -242,7 +251,7 @@ export class JsxHost {
 
   /** The object exposed into the VM as `__zushi`. */
   get bridge(): {
-    render: (surfaceId: SurfaceId, payload: RenderPayload, options?: any) => void;
+    render: (surfaceId: SurfaceId, payloadJson: string, options?: any) => void;
     update: (
       surfaceId: SurfaceId,
       options: { visible?: boolean; width?: unknown; height?: unknown }
@@ -260,8 +269,12 @@ export class JsxHost {
   } {
     const synced = this.synced;
     return {
-      render: (surfaceId, payload, options) =>
-        this.controllers.get(surfaceId)?.push(payload, options),
+      render: (surfaceId, payloadJson, options) => {
+        // The VM sends the tree as a JSON string (single marshal, no VMMap
+        // retention). Parse it back into the payload the controllers expect.
+        const payload = JSON.parse(payloadJson) as RenderPayload;
+        this.controllers.get(surfaceId)?.push(payload, options);
+      },
       // Surface ops (resize / show / hide) from the VM's surface handles.
       update: (surfaceId, options) =>
         this.controllers.get(surfaceId)?.update(options),

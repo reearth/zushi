@@ -465,7 +465,12 @@ function zushiVmRuntime() {
       }
     }
 
-    bridge.render(root.id, { g: root.gen, tree: tree }, root.options);
+    // Hand the tree across the host boundary as a single JSON string rather
+    // than a live object graph. quickjs-emscripten-sync would otherwise
+    // deep-copy it property-by-property (one boundary call per node/prop) and
+    // register every node in its VMMap for the arena's lifetime — a per-render
+    // permanent memory cost. A string marshals in one step and isn't retained.
+    bridge.render(root.id, JSON.stringify({ g: root.gen, tree: tree }), root.options);
     flushEffects(root);
     active = prev;
   }
@@ -728,7 +733,9 @@ function zushiVmRuntime() {
     const fn = root.handlerRegistry[hid];
     if (typeof fn === "function") {
       try {
-        fn(payload);
+        // The host sends the event payload as a JSON string (see the render
+        // path) so it isn't marshalled/retained object-by-object per event.
+        fn(typeof payload === "string" ? JSON.parse(payload) : payload);
       } catch (err) {
         reportError(err);
       }

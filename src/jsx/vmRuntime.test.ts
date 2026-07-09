@@ -51,8 +51,11 @@ function harness(
           placements: opts.placements ?? [],
           exposeRegisterComponent: opts.exposeRegisterComponent ?? true
         },
-        render: (surface: string, payload: RenderPayload) =>
-          renders.push({ ...payload, surface }),
+        // Mirror the real host: the VM pushes the tree as a JSON string.
+        render: (surface: string, payloadJson: string) => {
+          const payload = JSON.parse(payloadJson) as RenderPayload;
+          renders.push({ ...payload, surface });
+        },
         update: (surface: string, options: any) =>
           updates.push({ surface, options }),
         ready: (fn: Dispatch) => {
@@ -79,12 +82,12 @@ function harness(
       g: number,
       surface = "ui"
     ) {
-      dispatch?.(surface, hid, type, payload, g);
+      dispatch?.(surface, hid, type, JSON.stringify(payload ?? null), g);
       sandbox.requestEventLoop();
     },
     dispatchEvent(hid: number, type: string, payload: unknown, surface = "ui") {
       const g = last(surface)!.g;
-      dispatch?.(surface, hid, type, payload, g);
+      dispatch?.(surface, hid, type, JSON.stringify(payload ?? null), g);
       sandbox.requestEventLoop();
     }
   };
