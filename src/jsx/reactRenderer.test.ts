@@ -77,6 +77,42 @@ describe("hostReactRenderer", () => {
     expect(events).toEqual([{ hid: 7, type: "click", payload: {}, gen: 3 }]);
   });
 
+  test("reuses the same handler across renders but reports the current gen", () => {
+    const rendered: any[] = [];
+    const Rect = function Rect() {};
+    const events: any[] = [];
+    const r = hostReactRenderer({
+      React: fakeReact,
+      createRoot: () => ({
+        render: (n: any) => rendered.push(n),
+        unmount: () => {}
+      }),
+      components: { Rect }
+    });
+    const inst = r.mount(document.createElement("div"), {
+      onEvent: (hid, type, payload, gen) =>
+        events.push({ hid, type, payload, gen })
+    });
+
+    const node = () => ({
+      t: "Rect",
+      p: { x: 1 },
+      ev: [{ t: "click", h: 7 }],
+      c: []
+    });
+    inst.render([node()], 1);
+    inst.render([node()], 2);
+
+    const first = rendered[0].children[0].props.onClick;
+    const second = rendered[1].children[0].props.onClick;
+    // Same (hid, type) → the very same function instance is reused, so a
+    // memoized component sees a referentially-stable handler prop.
+    expect(second).toBe(first);
+    // Yet firing it reports the latest generation, not the one it was created in.
+    second({});
+    expect(events).toEqual([{ hid: 7, type: "click", payload: {}, gen: 2 }]);
+  });
+
   test("strips dangerouslySetInnerHTML and javascript: URLs from plugin props", () => {
     const rendered: any[] = [];
     const A = function A() {};

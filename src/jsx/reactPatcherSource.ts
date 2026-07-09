@@ -63,6 +63,19 @@ function zushiReactPatcher() {
     };
   }
 
+  // Handlers are cached by hid|type and reused across renders, so the handler
+  // prop stays referentially stable — letting React.memo bail out for
+  // structurally-stable subtrees (otherwise a fresh closure per render defeats
+  // it). Safe because a cached handler reads the live `currentGen` (so it posts
+  // the current generation) and the VM dispatches to hid N of the current
+  // generation — correct even if the tree structure shifts. hids reset to small
+  // integers each render, so the cache is bounded by the max tree size.
+  const handlerCache: any = {};
+  function getHandler(type: string, hid: number): any {
+    const key = hid + "|" + type;
+    return handlerCache[key] || (handlerCache[key] = makeHandler(type, hid));
+  }
+
   function toElement(node: any): any {
     const React = g.__zushiReact;
     if (node && typeof node.x === "string") return node.x; // text node
@@ -75,7 +88,7 @@ function zushiReactPatcher() {
       // "click" -> "onClick"; react-konva matches event names case-insensitively.
       const type: string = ev[i].t;
       const prop = "on" + type.charAt(0).toUpperCase() + type.slice(1);
-      props[prop] = makeHandler(type, ev[i].h);
+      props[prop] = getHandler(type, ev[i].h);
     }
     if (node.k != null) props.key = node.k;
     const kids = (node.c || []).map(toElement);

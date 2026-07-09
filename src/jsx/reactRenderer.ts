@@ -138,6 +138,24 @@ export function hostReactRenderer(options: HostReactRendererOptions): HostRender
       const root = options.createRoot(container);
       let gen = 0;
 
+      // Cache handlers by hid|type and reuse them across renders so the handler
+      // prop stays referentially stable — letting React.memo bail out for
+      // structurally-stable subtrees (a fresh closure per render would defeat
+      // it). Each handler reads the live `gen`, so it reports the current
+      // generation; the VM dispatches to hid N of the current generation, which
+      // stays correct even if the tree structure shifts. hids reset to small
+      // integers per render, so the cache is bounded by the max tree size.
+      const handlerCache = new Map<string, (e: any) => void>();
+      const getHandler = (type: string, hid: number): ((e: any) => void) => {
+        const key = hid + "|" + type;
+        let h = handlerCache.get(key);
+        if (!h) {
+          h = (e: any) => ctx.onEvent(hid, type, serialize(e, type), gen);
+          handlerCache.set(key, h);
+        }
+        return h;
+      };
+
       const toElement = (node: SNode): any => {
         if (node && typeof (node as any).x === "string") return (node as any).x;
         const el = node as Extract<SNode, { t: string }>;
@@ -146,8 +164,7 @@ export function hostReactRenderer(options: HostReactRendererOptions): HostRender
         for (let i = 0; i < ev.length; i++) {
           const type = ev[i].t;
           const hid = ev[i].h;
-          props["on" + cap(type)] = (e: any) =>
-            ctx.onEvent(hid, type, serialize(e, type), gen);
+          props["on" + cap(type)] = getHandler(type, hid);
         }
         if (el.k != null) props.key = el.k;
         const kids = (el.c || []).map(toElement);
