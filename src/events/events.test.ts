@@ -26,6 +26,30 @@ describe("events", () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
+  test("once cleans up its callback entry so a later off resolves the right listener", () => {
+    const [on, emit] = events<E>();
+    // Same source => same fingerprint, distinct identities (simulates a callback
+    // re-marshaled across the VM boundary, which `off` resolves by fingerprint).
+    const make = (log: number[]) => (n: number) => log.push(n);
+
+    const onceLog: number[] = [];
+    on.once("ping", make(onceLog));
+    emit("ping", 1); // fires once; its Map entry must be cleaned up here
+    expect(onceLog).toEqual([1]);
+
+    const onLog: number[] = [];
+    on.on("ping", make(onLog)); // same fingerprint as the once-callback
+    emit("ping", 2);
+    expect(onLog).toEqual([2]);
+
+    // A leaked once-entry (inserted first) would win the fingerprint fallback in
+    // `off` and leave the real `on` listener attached. With cleanup, off detaches
+    // the correct listener and the next emit does nothing.
+    on.off("ping", make(onLog));
+    emit("ping", 3);
+    expect(onLog).toEqual([2]);
+  });
+
   test("only the matching type is delivered", () => {
     const [on, emit] = events<E>();
     const ping = vi.fn();

@@ -39,12 +39,17 @@ function zushiVmRuntime() {
   // ---- vnode factories --------------------------------------------------
 
   function flatten(arr: any[]): any[] {
-    let out: any[] = [];
-    for (let i = 0; i < arr.length; i++) {
-      const v = arr[i];
-      if (Array.isArray(v)) out = out.concat(flatten(v));
-      else out.push(v);
+    // Accumulate into a single array with push. The old recursive `concat`
+    // rebuilt the accumulator on every element (quadratic on deep nesting).
+    const out: any[] = [];
+    function walk(a: any[]): void {
+      for (let i = 0; i < a.length; i++) {
+        const v = a[i];
+        if (Array.isArray(v)) walk(v);
+        else out.push(v);
+      }
     }
+    walk(arr);
     return out;
   }
 

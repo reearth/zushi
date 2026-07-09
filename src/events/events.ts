@@ -115,7 +115,14 @@ export function events<
   const once = <T extends keyof E>(type: T, callback: EventCallback<E[T]>) => {
     const fingerprint = getFunctionFingerprintString(callback);
     const ecbFn = getEventCallback(type, callback, fingerprint);
-    e.addEventListener(String(type), ecbFn, { once: true });
+    const wrapped = (ev: Event): void => {
+      // EventTarget auto-removes the listener after it fires, but the `callbacks`
+      // Map entry would otherwise leak — drop it here so once-listeners don't
+      // accumulate across fires.
+      deleteEventCallback(type, ecbFn, fingerprint);
+      ecbFn(ev);
+    };
+    e.addEventListener(String(type), wrapped, { once: true });
   };
 
   const events = {

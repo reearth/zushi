@@ -52,10 +52,12 @@ export class SyncedStore {
    */
   async hydrate(): Promise<void> {
     if (!this.persist || !this.storage) return;
-    const keys = await this.storage.keysAsync(this.instanceId);
-    for (const key of keys) {
-      this.map.set(key, await this.storage.getAsync(this.instanceId, key));
-    }
+    const storage = this.storage;
+    const keys = await storage.keysAsync(this.instanceId);
+    const values = await Promise.all(
+      keys.map((key) => storage.getAsync(this.instanceId, key))
+    );
+    keys.forEach((key, i) => this.map.set(key, values[i]));
   }
 
   has(key: string): boolean {

@@ -65,6 +65,7 @@ export class Sandbox {
   private onError: (err: any) => void;
   private backendRef: Backend | undefined;
   private eventLoopTimer: number | undefined;
+  private eventLoopScheduled = false;
   private _loaded = false;
   private disposed = false;
 
@@ -150,18 +151,22 @@ export class Sandbox {
   }
 
   private startEventLoop(): void {
+    // Dedup: only one pump loop is in flight at a time. Bursts of messages /
+    // synced changes would otherwise stack parallel pump chains.
+    if (this.eventLoopScheduled) return;
+    this.eventLoopScheduled = true;
     this.eventLoopTimer = (
       globalThis.setTimeout as Window["setTimeout"]
     )(() => this.runEventLoop(), 0);
   }
 
   private runEventLoop(): void {
+    this.eventLoopScheduled = false;
     if (!this.backendRef) return;
     try {
       if (this.backendRef.pump()) {
-        this.eventLoopTimer = (
-          globalThis.setTimeout as Window["setTimeout"]
-        )(() => this.runEventLoop(), 0);
+        // Re-schedule while the VM still has pending work.
+        this.startEventLoop();
       }
     } catch (err) {
       this.onError(err);
@@ -178,6 +183,7 @@ export class Sandbox {
     if (typeof this.eventLoopTimer === "number") {
       clearTimeout(this.eventLoopTimer);
     }
+    this.eventLoopScheduled = false;
     if (this.backendRef) {
       this.backendRef.dispose();
       this.backendRef = undefined;

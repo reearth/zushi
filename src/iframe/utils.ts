@@ -13,6 +13,7 @@ export const insertToBody = (
 export const autoResizeScript = (autoResizeMessageKey: string): string => {
   return `<script id="_zushi_resize">
       if ("ResizeObserver" in window) {
+        let lastWidth, lastHeight;
         new window.ResizeObserver(entries => {
           const win = document.defaultView;
           const html = document.body.parentElement;
@@ -21,6 +22,9 @@ export const autoResizeScript = (autoResizeMessageKey: string): string => {
           const verticalMargin = parseInt(st.getPropertyValue("margin-top"), 10) + parseInt(st.getPropertyValue("margin-bottom"), 10);
           const width = html.offsetWidth + horizontalMargin;
           const height = html.offsetHeight + verticalMargin;
+          if (width === lastWidth && height === lastHeight) return;
+          lastWidth = width;
+          lastHeight = height;
           if (parent) {
             parent.postMessage({
               [${JSON.stringify(autoResizeMessageKey)}]: { width, height }
