@@ -39,9 +39,12 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Trusted publishing requires a recent npm that supports OIDC.
+      # Trusted publishing requires a recent npm that supports OIDC (>= 11.5.1).
+      # Pin to the latest stable 11.x: npm@latest is currently 12.0.0, which
+      # ships a broken provenance path ("Cannot find module 'sigstore'",
+      # npm/cli#9722) that fails `npm publish --provenance`.
       - name: Update npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Publish to npm
         run: npm publish --access public --provenance
