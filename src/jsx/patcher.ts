@@ -21,6 +21,9 @@ function zushiPatcher() {
   let currentGen = 0;
 
   window.addEventListener("message", function (e) {
+    // The host posts renders into this iframe via its `contentWindow`, so the
+    // only legitimate sender is the parent window. Ignore anything else.
+    if (e.source !== window.parent) return;
     const d: any = e.data;
     if (!d || d.__zushi !== MSG_RENDER) return;
     currentGen = d.g;
@@ -192,7 +195,16 @@ function zushiPatcher() {
       applyControlled(el, key, value);
       return;
     }
-    if ((key === "href" || key === "src") && isDangerousUrl(value)) return;
+    const keyLower = key.toLowerCase();
+    if (
+      (keyLower === "href" ||
+        keyLower === "src" ||
+        keyLower === "formaction" ||
+        keyLower === "action" ||
+        keyLower === "xlink:href") &&
+      isDangerousUrl(value)
+    )
+      return;
     if (typeof value === "boolean") {
       if (value) el.setAttribute(key, "");
       else el.removeAttribute(key);
@@ -237,7 +249,18 @@ function zushiPatcher() {
   }
 
   function isDangerousUrl(value: any): boolean {
-    return typeof value === "string" && /^\s*javascript:/i.test(value);
+    if (typeof value !== "string") return false;
+    // Strip leading control chars / whitespace (charCode <= 32) before matching.
+    // A literal control-char regex range is forbidden by ESLint (no-control-regex),
+    // so peel them off with a charCode loop instead.
+    let i = 0;
+    while (i < value.length && value.charCodeAt(i) <= 32) i++;
+    const s = value.slice(i).toLowerCase();
+    return (
+      s.indexOf("javascript:") === 0 ||
+      s.indexOf("vbscript:") === 0 ||
+      s.indexOf("data:text/html") === 0
+    );
   }
 
   // ---- events -----------------------------------------------------------

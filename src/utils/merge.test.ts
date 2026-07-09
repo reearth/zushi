@@ -30,4 +30,21 @@ describe("merge", () => {
     expect(merge({ a: { x: 1 } }, { a: null })).toEqual({ a: null }); // null
     expect(merge({ a: 1 }, { a: { x: 1 } })).toEqual({ a: { x: 1 } }); // base primitive
   });
+
+  test("does not pollute prototypes via dangerous keys", () => {
+    // JSON.parse creates a genuine own `__proto__` key (a literal would set the
+    // prototype instead), simulating a plugin-derived object crossing the VM.
+    const evil = JSON.parse('{"__proto__": {"polluted": true}}');
+    const out = merge({ a: 1 }, evil);
+    expect(({} as any).polluted).toBeUndefined();
+    expect((Object.prototype as any).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect((out as any).polluted).toBeUndefined();
+
+    const evil2 = JSON.parse(
+      '{"constructor": {"prototype": {"polluted": true}}}'
+    );
+    merge({ a: 1 }, evil2);
+    expect(({} as any).polluted).toBeUndefined();
+  });
 });

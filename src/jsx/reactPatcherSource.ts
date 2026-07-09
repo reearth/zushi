@@ -105,6 +105,9 @@ function zushiReactPatcher() {
   }
 
   window.addEventListener("message", function (e: any) {
+    // The host posts renders into this iframe via its `contentWindow`, so the
+    // only legitimate sender is the parent window. Ignore anything else.
+    if (e.source !== window.parent) return;
     const d: any = e.data;
     if (!d || d.__zushi !== MSG_RENDER) return;
     currentGen = d.g;

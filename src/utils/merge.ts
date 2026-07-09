@@ -16,6 +16,10 @@ export function merge(
   if (!override) return { ...base };
   const out: Record<string, any> = { ...base };
   for (const key of Object.keys(override)) {
+    // Skip keys that could alter the result's prototype chain, so a
+    // plugin-derived override can't pollute Object.prototype.
+    if (key === "__proto__" || key === "constructor" || key === "prototype")
+      continue;
     const a = out[key];
     const b = override[key];
     out[key] = isPlainObject(a) && isPlainObject(b) ? merge(a, b) : b;
